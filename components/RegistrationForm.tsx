@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useRef, useState } from "react";
+import { Building2, UserRound } from "lucide-react";
 
 type RegistrationFormProps = {
   theme: "dark" | "light";
@@ -86,26 +87,22 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
     }
   };
 
-  const panelClass = isDark
-    ? "border-[#1f2d32] bg-linear-to-b from-[#091418]/95 to-[#051015]/95 shadow-[0_20px_80px_-35px_rgba(21,176,184,0.75)]"
-    : "border-[#b9d8d4] bg-linear-to-b from-[#f8fffe]/95 to-[#ecf6f5]/95 shadow-[0_22px_70px_-35px_rgba(20,78,86,0.45)]";
+  const panelClass = "border-[#22363f] bg-linear-to-b from-[#070f15]/90 via-[#050b11]/92 to-[#04080d]/94 shadow-[0_32px_100px_-38px_rgba(42,211,255,0.9)]";
 
-  const titleColor = isDark ? "text-[#f8fffd]" : "text-[#0d3438]";
-  const subtitleColor = isDark ? "text-[#9eb4b0]" : "text-[#4f6f6c]";
-  const brandColor = isDark ? "text-[#8ed7cf]" : "text-[#2e6e67]";
-  const categoryWrapClass = isDark ? "border-[#21404a] bg-[#0b1b22]/70" : "border-[#b6d0cd] bg-[#e4f1ef]/90";
-  const individualInputClass = isDark
-    ? "border-[#22414d] bg-[#0a2029] text-[#e6f4f2] focus:border-[#2dc7b8]"
-    : "border-[#9ec7c2] bg-[#f6fffd] text-[#11383c] focus:border-[#1ea696]";
-  const nonIndividualInputClass = isDark
-    ? "border-[#3d3728] bg-[#221b11] text-[#fff7ec] focus:border-[#ff9f43]"
-    : "border-[#d2bf9f] bg-[#fff9f0] text-[#50340f] focus:border-[#e48a33]";
-  const helperTextClass = isDark ? "text-[#759792]" : "text-[#5d8782]";
-  const labelClass = isDark ? "text-[#95b8b3]" : "text-[#456a66]";
-  const labelWarmClass = isDark ? "text-[#c9b89f]" : "text-[#886844]";
+  const titleColor = "text-[#f8fffd]";
+  const subtitleColor = "text-[#9eb4b0]";
+  const brandColor = "text-[#8ed7cf]";
+  const categoryWrapClass = "border-[#21404a] bg-[#0b1b22]/70";
+  const individualInputClass = "border-[#22414d] bg-[#0a2029] text-[#e6f4f2] focus:border-[#2dc7b8]";
+  const nonIndividualInputClass = "border-[#3d3728] bg-[#221b11] text-[#fff7ec] focus:border-[#ff9f43]";
+  const helperTextClass = "text-[#759792]";
+  const labelClass = "text-[#95b8b3]";
+  const labelWarmClass = "text-[#c9b89f]";
 
   return (
-    <div className={`w-full max-w-xl rounded-3xl border p-8 backdrop-blur-xl ${panelClass}`}>
+    <div className="relative w-full max-w-xl">
+      <div className={`bank-rainbow-border w-full rounded-3xl p-0.5 ${isDark ? "" : "bank-rainbow-border-off"}`}>
+        <div className={`relative w-full rounded-[1.35rem] border p-8 backdrop-blur-2xl ${panelClass}`}>
       <div className="mb-8 text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#5fa8a0]/50 bg-white/90 p-2 shadow-sm">
           <Image src="/logo.png" alt="LITTLE Mini Banking System logo" width={40} height={40} className="h-10 w-10 object-contain" priority />
@@ -122,12 +119,13 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
             setCategory("Individual");
             setFormData({ ...formData, subType: "Individual" });
           }}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all ${
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all ${
             category === "Individual"
               ? "bg-[#2dc7b8] text-[#022226]"
               : "text-[#7d9794] hover:text-[#c0d6d2]"
           }`}
         >
+          <UserRound size={16} />
           Individual
         </button>
         <button
@@ -136,12 +134,13 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
             setCategory("Non-Individual");
             setFormData({ ...formData, subType: "Corporate" });
           }}
-          className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all ${
+          className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all ${
             category === "Non-Individual"
               ? "bg-[#ff9f43] text-[#301000]"
               : "text-[#7d9794] hover:text-[#c0d6d2]"
           }`}
         >
+          <Building2 size={16} />
           Non-Individual
         </button>
       </div>
@@ -149,6 +148,10 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
       <form onSubmit={handleSubmit} className="space-y-5">
         {category === "Individual" ? (
           <div className="space-y-4 animate-in fade-in duration-500">
+            <p className={`inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] ${labelClass}`}>
+              <UserRound size={14} />
+              Individual Details
+            </p>
             <input
               type="text"
               placeholder="First Name"
@@ -203,6 +206,10 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
           </div>
         ) : (
           <div className="space-y-4 animate-in fade-in duration-500">
+            <p className={`inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] ${labelWarmClass}`}>
+              <Building2 size={14} />
+              Organization Details
+            </p>
             <input
               type="text"
               placeholder="Organization Name"
@@ -269,6 +276,8 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
           {loading ? "Processing..." : "Create Client Profile"}
         </button>
       </form>
+        </div>
+      </div>
     </div>
   );
 }

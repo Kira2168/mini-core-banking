@@ -37,6 +37,26 @@ type AdminClientsTableProps = {
   theme: "dark" | "light";
 };
 
+type EditFormState = {
+  status: ClientStatus;
+  firstName: string;
+  lastName: string;
+  dob: string;
+  gender: "Male" | "Female" | "Other";
+  individualSubType: string;
+  organizationName: string;
+  registrationNumber: string;
+  incorporationDate: string;
+  nonIndividualSubType: string;
+};
+
+const toDateInputValue = (value: string | null) => {
+  if (!value) {
+    return "";
+  }
+  return value.slice(0, 10);
+};
+
 export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
   const isDark = theme === "dark";
   const [category, setCategory] = useState<CategoryFilter>("All");
@@ -47,6 +67,9 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [meta, setMeta] = useState({ totalClients: 0, totalIndividuals: 0, totalNonIndividuals: 0 });
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<Record<number, ClientStatus>>({});
+  const [editingClient, setEditingClient] = useState<ClientRow | null>(null);
+  const [editForm, setEditForm] = useState<EditFormState | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchClients = async () => {
     setLoading(true);
@@ -130,6 +153,78 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
     await fetchClients();
   };
 
+  const openEditModal = (client: ClientRow) => {
+    setEditingClient(client);
+    setEditForm({
+      status: client.status,
+      firstName: client.firstName ?? "",
+      lastName: client.lastName ?? "",
+      dob: toDateInputValue(client.dob),
+      gender: client.gender ?? "Male",
+      individualSubType: client.individualSubType ?? "Individual",
+      organizationName: client.organizationName ?? "",
+      registrationNumber: client.registrationNumber ?? "",
+      incorporationDate: toDateInputValue(client.incorporationDate),
+      nonIndividualSubType: client.nonIndividualSubType ?? "Corporate",
+    });
+  };
+
+  const closeEditModal = () => {
+    setEditingClient(null);
+    setEditForm(null);
+    setSavingEdit(false);
+  };
+
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingClient || !editForm) {
+      return;
+    }
+
+    setSavingEdit(true);
+
+    const payload =
+      editingClient.clientCategory === "Individual"
+        ? {
+            status: editForm.status,
+            firstName: editForm.firstName,
+            lastName: editForm.lastName,
+            dob: editForm.dob,
+            gender: editForm.gender,
+            individualSubType: editForm.individualSubType,
+          }
+        : {
+            status: editForm.status,
+            organizationName: editForm.organizationName,
+            registrationNumber: editForm.registrationNumber,
+            incorporationDate: editForm.incorporationDate,
+            nonIndividualSubType: editForm.nonIndividualSubType,
+          };
+
+    try {
+      const response = await fetch(`/api/admin/clients/${editingClient.clientId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(result.error ?? "Update failed.");
+        return;
+      }
+
+      closeEditModal();
+      await fetchClients();
+    } catch {
+      alert("Update failed.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const filteredLabel = useMemo(() => {
     return `${clients.length} result${clients.length === 1 ? "" : "s"}`;
   }, [clients.length]);
@@ -148,6 +243,18 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
   const tableBody = isDark ? "text-[#d9efeb]" : "text-[#234f53]";
   const tableRow = isDark ? "border-[#14262d]" : "border-[#d5e8e5]";
   const emptyText = isDark ? "text-[#9db8b4]" : "text-[#5a7f7b]";
+  const statusSelectClass = isDark
+    ? "rounded-lg border border-[#2b4c57] bg-[#102932] px-2 py-1 text-xs text-[#dffbf7] outline-none"
+    : "rounded-lg border border-[#9ec7c2] bg-[#fbfffe] px-2 py-1 text-xs text-[#1e4f52] outline-none";
+  const saveBtnClass = isDark
+    ? "rounded-lg border border-[#2f5963] bg-[#10303a] px-3 py-1 text-xs font-semibold text-[#9febe3] transition-colors hover:bg-[#16404d]"
+    : "rounded-lg border border-[#8dc0b9] bg-[#e9f9f6] px-3 py-1 text-xs font-semibold text-[#16534c] transition-colors hover:bg-[#ddf2ee]";
+  const deleteBtnClass = isDark
+    ? "rounded-lg border border-red-600/50 bg-red-700/20 px-3 py-1 text-xs font-semibold text-red-200 transition-colors hover:bg-red-700/35"
+    : "rounded-lg border border-red-300 bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 transition-colors hover:bg-red-200";
+  const editBtnClass = isDark
+    ? "rounded-lg border border-[#406089] bg-[#122339] px-3 py-1 text-xs font-semibold text-[#bfddff] transition-colors hover:bg-[#1b3452]"
+    : "rounded-lg border border-[#abc9ec] bg-[#eaf4ff] px-3 py-1 text-xs font-semibold text-[#1f4c7a] transition-colors hover:bg-[#dbeafc]";
 
   return (
     <>
@@ -272,7 +379,7 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
                               [client.clientId]: e.target.value as ClientStatus,
                             }))
                           }
-                          className="rounded-lg border border-[#2b4c57] bg-[#102932] px-2 py-1 text-xs text-[#dffbf7] outline-none"
+                          className={statusSelectClass}
                         >
                           <option value="Active">Active</option>
                           <option value="Inactive">Inactive</option>
@@ -283,15 +390,22 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
                         <div className="flex gap-2">
                           <button
                             type="button"
+                            onClick={() => openEditModal(client)}
+                            className={editBtnClass}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => updateStatus(client.clientId)}
-                            className="rounded-lg border border-[#2f5963] bg-[#10303a] px-3 py-1 text-xs font-semibold text-[#9febe3] transition-colors hover:bg-[#16404d]"
+                            className={saveBtnClass}
                           >
                             Save
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteClient(client.clientId)}
-                            className="rounded-lg border border-red-600/50 bg-red-700/20 px-3 py-1 text-xs font-semibold text-red-200 transition-colors hover:bg-red-700/35"
+                            className={deleteBtnClass}
                           >
                             Delete
                           </button>
@@ -305,6 +419,192 @@ export default function AdminClientsTable({ theme }: AdminClientsTableProps) {
           </table>
         </div>
       </section>
+
+      {editingClient && editForm ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/55" onClick={closeEditModal} />
+          <section
+            className={`relative z-10 w-full max-w-xl rounded-2xl border p-5 backdrop-blur-xl ${
+              isDark ? "border-[#2a4450] bg-[#081822]/95" : "border-[#b8d2ce] bg-[#f9fffd]/95"
+            }`}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-xs uppercase tracking-[0.22em] ${isDark ? "text-[#8bc6c0]" : "text-[#317a72]"}`}>
+                  Edit Client
+                </p>
+                <h3 className={`mt-1 text-xl font-bold ${heading}`}>Client ID {editingClient.clientId}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className={`rounded-lg border px-2.5 py-1 text-sm ${
+                  isDark ? "border-[#35535b] text-[#b9d9d4]" : "border-[#a8c9c4] text-[#2b6460]"
+                }`}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit} className="space-y-3">
+              <div>
+                <label className={`mb-1 block text-xs uppercase tracking-[0.2em] ${cardTitle}`}>Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) =>
+                    setEditForm((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            status: e.target.value as ClientStatus,
+                          }
+                        : prev
+                    )
+                  }
+                  className={`w-full rounded-xl border p-3 text-sm outline-none ${field}`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+              </div>
+
+              {editingClient.clientCategory === "Individual" ? (
+                <>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="First Name"
+                      value={editForm.firstName}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, firstName: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Last Name"
+                      value={editForm.lastName}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, lastName: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <input
+                      type="date"
+                      value={editForm.dob}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, dob: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                    />
+                    <select
+                      value={editForm.gender}
+                      onChange={(e) =>
+                        setEditForm((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                gender: e.target.value as "Male" | "Female" | "Other",
+                              }
+                            : prev
+                        )
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <select
+                      value={editForm.individualSubType}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, individualSubType: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                    >
+                      <option value="Individual">Individual Client</option>
+                      <option value="Minor">Minor</option>
+                      <option value="Group">Group</option>
+                      <option value="Staff">Staff</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Organization Name"
+                    value={editForm.organizationName}
+                    onChange={(e) =>
+                      setEditForm((prev) => (prev ? { ...prev, organizationName: e.target.value } : prev))
+                    }
+                    className={`w-full rounded-xl border p-3 text-sm outline-none ${field}`}
+                    required
+                  />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="Registration Number"
+                      value={editForm.registrationNumber}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, registrationNumber: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                      required
+                    />
+                    <input
+                      type="date"
+                      value={editForm.incorporationDate}
+                      onChange={(e) =>
+                        setEditForm((prev) => (prev ? { ...prev, incorporationDate: e.target.value } : prev))
+                      }
+                      className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+                    />
+                  </div>
+                  <select
+                    value={editForm.nonIndividualSubType}
+                    onChange={(e) =>
+                      setEditForm((prev) => (prev ? { ...prev, nonIndividualSubType: e.target.value } : prev))
+                    }
+                    className={`w-full rounded-xl border p-3 text-sm outline-none ${field}`}
+                  >
+                    <option value="Corporate">Corporate</option>
+                    <option value="Association">Association</option>
+                    <option value="Bank">Bank</option>
+                    <option value="NGO">NGO</option>
+                  </select>
+                </>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className={`rounded-xl border px-4 py-2 text-sm font-semibold ${
+                    isDark
+                      ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                      : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="rounded-xl bg-[#2dc7b8] px-4 py-2 text-sm font-semibold text-[#03272b] transition-colors hover:bg-[#43ded0] disabled:opacity-50"
+                >
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }
