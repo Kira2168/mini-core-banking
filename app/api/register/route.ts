@@ -6,6 +6,7 @@ type Category = "Individual" | "Non-Individual";
 
 const INDIVIDUAL_SUBTYPES = new Set(["Individual", "Minor", "Group", "Staff"]);
 const NON_INDIVIDUAL_SUBTYPES = new Set(["Corporate", "Association", "Bank", "NGO"]);
+const GENDERS = new Set(["Male", "Female", "Other"]);
 
 const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isRegistrationNumber = (value: string) => /^REG-\d{5,12}$/.test(value);
@@ -75,6 +76,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, error: "Date of birth must use YYYY-MM-DD format." }, { status: 400 });
       }
 
+      if (!GENDERS.has(gender)) {
+        return NextResponse.json({ success: false, error: "Invalid gender." }, { status: 400 });
+      }
+
       const parsedDob = parseIsoDateUtc(dob);
       if (!parsedDob) {
         return NextResponse.json(
@@ -134,7 +139,7 @@ export async function POST(request: Request) {
         firstName || null,
         lastName || null,
         dob || null,
-        gender,
+        category === "Individual" ? gender : null,
         category === "Individual" ? subType : null,
         orgName || null,
         regNo || null,

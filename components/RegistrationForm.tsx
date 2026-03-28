@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useRef, useState } from "react";
-import { Building2, UserRound } from "lucide-react";
+import { Building2, CheckCircle2, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 
 type RegistrationFormProps = {
   theme: "dark" | "light";
@@ -10,6 +10,9 @@ type RegistrationFormProps = {
 export default function RegistrationForm({ theme }: RegistrationFormProps) {
   const [category, setCategory] = useState<"Individual" | "Non-Individual">("Individual");
   const [loading, setLoading] = useState(false);
+  const [successBankId, setSuccessBankId] = useState<number | null>(null);
+  const [successClientName, setSuccessClientName] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const dobInputRef = useRef<HTMLInputElement>(null);
   const incorpDateInputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === "dark";
@@ -56,51 +59,72 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError("");
 
     if (category === "Individual" && formData.dob && formData.dob > maxAdultDob) {
-      alert("Individual clients must be at least 18 years old.");
+      setSubmitError("Individual clients must be at least 18 years old.");
       return;
     }
 
     setLoading(true);
 
     try {
+      const normalizedFirstName = formData.firstName.trim();
+      const normalizedLastName = formData.lastName.trim();
+      const normalizedOrgName = formData.orgName.trim();
+      const normalizedRegNo = formData.regNo.trim();
+      const clientDisplayName =
+        category === "Individual"
+          ? `${normalizedFirstName} ${normalizedLastName}`.trim()
+          : normalizedOrgName;
+
       const response = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
           category,
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          orgName: formData.orgName.trim(),
-          regNo: formData.regNo.trim(),
+          firstName: normalizedFirstName,
+          lastName: normalizedLastName,
+          orgName: normalizedOrgName,
+          regNo: normalizedRegNo,
         }),
       });
 
       const result = await response.json();
       if (result.success) {
-        const generatedId = result.data[0][0].Generated_Bank_ID;
-        alert(`Success! Client registered. Bank ID: ${generatedId}`);
-
-        setFormData({
-          firstName: "",
-          lastName: "",
-          dob: "",
-          gender: "Male",
-          orgName: "",
-          regNo: "",
-          incorpDate: "",
-          subType: category === "Individual" ? "Individual" : "Corporate",
-        });
+        const generatedId = Number(result?.data?.[0]?.[0]?.Generated_Bank_ID);
+        if (Number.isFinite(generatedId) && generatedId > 0) {
+          setSuccessBankId(generatedId);
+          setSuccessClientName(clientDisplayName || "Client");
+        } else {
+          setSubmitError("Registration succeeded but no bank ID was returned.");
+        }
       } else {
-        alert("Error: " + result.error);
+        setSubmitError(result.error || "Registration failed.");
       }
     } catch {
-      alert("Failed to connect to server");
+      setSubmitError("Failed to connect to server");
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForNextRegistration = () => {
+    setSuccessBankId(null);
+    setSuccessClientName("");
+    setSubmitError("");
+    setCategory("Individual");
+    setFormData({
+      firstName: "",
+      lastName: "",
+      dob: "",
+      gender: "Male",
+      orgName: "",
+      regNo: "",
+      incorpDate: "",
+      subType: "Individual",
+    });
   };
 
   const panelClass = "border-[#22363f] bg-linear-to-b from-[#070f15]/90 via-[#050b11]/92 to-[#04080d]/94 shadow-[0_32px_100px_-38px_rgba(42,211,255,0.9)]";
@@ -114,6 +138,53 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
   const helperTextClass = "text-[#759792]";
   const labelClass = "text-[#95b8b3]";
   const labelWarmClass = "text-[#c9b89f]";
+
+  if (successBankId) {
+    return (
+      <div className="relative w-full max-w-xl">
+        <div className="bank-rainbow-border bank-rainbow-border-off w-full rounded-3xl p-0.5">
+          <div className={`relative overflow-hidden rounded-[1.35rem] border p-8 backdrop-blur-2xl ${panelClass} ${isDark ? "" : "brightness-[1.03]"}`}>
+            <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#2dc7b8]/18 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-[#ff9f43]/20 blur-3xl" />
+
+            <div className="relative text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#3f716c] bg-[#0b2f32] text-[#84f8eb]">
+                <CheckCircle2 size={34} />
+              </div>
+
+              <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#2f5a62] bg-[#0b1c22]/90 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#9bd7d0]">
+                <Sparkles size={14} />
+                Registration Complete
+              </p>
+
+              <h2 className="text-3xl font-black tracking-tight text-[#f8fffd]">Client Registered Successfully</h2>
+              <p className="mt-2 text-sm text-[#a8bfba]">The new client profile has been created in the core banking system.</p>
+
+              <div className="mx-auto mt-7 max-w-sm rounded-2xl border border-[#34565e] bg-[#07151c]/90 p-5 text-left shadow-[0_24px_60px_-40px_rgba(45,199,184,0.9)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8db5af]">Client Name</p>
+                <p className="mt-2 wrap-break-word text-lg font-bold text-[#e7fffb]">{successClientName}</p>
+
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8db5af]">Generated Bank ID</p>
+                <p className="mt-2 break-all text-3xl font-black tracking-[0.08em] text-[#8ef3e4]">{successBankId}</p>
+                <p className="mt-2 inline-flex items-center gap-2 text-xs text-[#88a6a2]">
+                  <ShieldCheck size={14} />
+                  Keep this ID for all future operations.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetForNextRegistration}
+                className="mt-8 w-full rounded-2xl bg-[#2dc7b8] py-4 font-bold tracking-wide text-[#03272b] transition-colors hover:bg-[#43ded0]"
+              >
+                Register Another Client
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full max-w-xl">
@@ -162,6 +233,10 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {submitError ? (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? "border-[#5d3232] bg-[#351717]/85 text-[#ffc8c8]" : "border-[#b86c6c] bg-[#fff0f0] text-[#8a2a2a]"}`}>{submitError}</div>
+        ) : null}
+
         {category === "Individual" ? (
           <div className="space-y-4 animate-in fade-in duration-500">
             <p className={`inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] ${labelClass}`}>
@@ -208,6 +283,16 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
               </div>
               <p className={`mt-1 text-xs ${helperTextClass}`}>Use the calendar picker. Minimum age for individuals is 18 years.</p>
             </div>
+
+            <select
+              className={`w-full rounded-xl border p-3 outline-none transition-colors ${individualInputClass}`}
+              value={formData.gender}
+              onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+            >
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
 
             <select
               className={`w-full rounded-xl border p-3 outline-none transition-colors ${individualInputClass}`}
