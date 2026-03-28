@@ -14,7 +14,17 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
   const incorpDateInputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === "dark";
 
-  const today = new Date().toISOString().split("T")[0];
+  const formatDateInputValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayDate = new Date();
+  const today = formatDateInputValue(todayDate);
+  const maxAdultDobDate = new Date(todayDate.getFullYear() - 18, todayDate.getMonth(), todayDate.getDate());
+  const maxAdultDob = formatDateInputValue(maxAdultDobDate);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -46,6 +56,12 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (category === "Individual" && formData.dob && formData.dob > maxAdultDob) {
+      alert("Individual clients must be at least 18 years old.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -80,7 +96,7 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
       } else {
         alert("Error: " + result.error);
       }
-    } catch (err) {
+    } catch {
       alert("Failed to connect to server");
     } finally {
       setLoading(false);
@@ -101,7 +117,7 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
 
   return (
     <div className="relative w-full max-w-xl">
-      <div className={`bank-rainbow-border w-full rounded-3xl p-0.5 ${isDark ? "" : "bank-rainbow-border-off"}`}>
+      <div className="bank-rainbow-border bank-rainbow-border-off w-full rounded-3xl p-0.5">
         <div className={`relative w-full rounded-[1.35rem] border p-8 backdrop-blur-2xl ${panelClass}`}>
       <div className="mb-8 text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#5fa8a0]/50 bg-white/90 p-2 shadow-sm">
@@ -177,7 +193,7 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
                   ref={dobInputRef}
                   type="date"
                   required
-                  max={today}
+                  max={maxAdultDob}
                   className={`w-full rounded-xl border p-3 outline-none transition-colors ${individualInputClass}`}
                   value={formData.dob}
                   onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
@@ -190,7 +206,7 @@ export default function RegistrationForm({ theme }: RegistrationFormProps) {
                   Pick
                 </button>
               </div>
-              <p className={`mt-1 text-xs ${helperTextClass}`}>Use the calendar picker to select the date.</p>
+              <p className={`mt-1 text-xs ${helperTextClass}`}>Use the calendar picker. Minimum age for individuals is 18 years.</p>
             </div>
 
             <select

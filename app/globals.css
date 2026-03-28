@@ -150,11 +150,11 @@ body {
 }
 
 .bank-rainbow-border.bank-rainbow-border-off::before {
-  content: none;
+  animation: none;
 }
 
 .bank-rainbow-border.bank-rainbow-border-off::after {
-  content: none;
+  animation: none;
 }
 
 .bank-rainbow-border > * {

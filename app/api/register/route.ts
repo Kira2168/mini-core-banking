@@ -10,6 +10,37 @@ const NON_INDIVIDUAL_SUBTYPES = new Set(["Corporate", "Association", "Bank", "NG
 const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isRegistrationNumber = (value: string) => /^REG-\d{5,12}$/.test(value);
 
+const parseIsoDateUtc = (value: string) => {
+  if (!isIsoDate(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  // Reject impossible calendar dates like 2026-02-31.
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+const calculateAgeYearsUtc = (dob: Date, reference: Date) => {
+  let age = reference.getUTCFullYear() - dob.getUTCFullYear();
+  const hasHadBirthdayThisYear =
+    reference.getUTCMonth() > dob.getUTCMonth() ||
+    (reference.getUTCMonth() === dob.getUTCMonth() && reference.getUTCDate() >= dob.getUTCDate());
+
+  if (!hasHadBirthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -43,6 +74,30 @@ export async function POST(request: Request) {
       if (!isIsoDate(dob)) {
         return NextResponse.json({ success: false, error: "Date of birth must use YYYY-MM-DD format." }, { status: 400 });
       }
+
+      const parsedDob = parseIsoDateUtc(dob);
+      if (!parsedDob) {
+        return NextResponse.json(
+          { success: false, error: "Date of birth must be a real calendar date." },
+          { status: 400 }
+        );
+      }
+
+      const now = new Date();
+      if (parsedDob.getTime() > now.getTime()) {
+        return NextResponse.json(
+          { success: false, error: "Date of birth cannot be in the future." },
+          { status: 400 }
+        );
+      }
+
+      const age = calculateAgeYearsUtc(parsedDob, now);
+      if (age < 18) {
+        return NextResponse.json(
+          { success: false, error: "Individual clients must be at least 18 years old." },
+          { status: 400 }
+        );
+      }
     }
 
     if (category === "Non-Individual") {
@@ -72,7 +127,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const [result]: any = await db.execute(
+    const [result] = await db.execute(
       `CALL PRC_Register_Client(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         category,
@@ -92,12 +147,13 @@ export async function POST(request: Request) {
       success: true,
       data: result,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unexpected server error.";
     console.error("Database Error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: errorMessage,
       },
       { status: 500 }
     );
