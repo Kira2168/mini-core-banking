@@ -1,17 +1,35 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
 import AdminClientsTable from "@/components/AdminClientsTable";
+import AdminAccountsPanel from "@/components/AdminAccountsPanel";
+import AdminProductsPanel from "@/components/AdminProductsPanel";
+import AdminTransactionsPanel from "@/components/AdminTransactionsPanel";
+import AdminDashboardMetrics from "@/components/AdminDashboardMetrics";
 
 type AdminDashboardShellProps = {
   adminName: string;
+  showClients?: boolean;
+  showProducts?: boolean;
+  showAccounts?: boolean;
+  showTransactions?: boolean;
+  showBackToDashboard?: boolean;
 };
 
-export default function AdminDashboardShell({ adminName }: AdminDashboardShellProps) {
+export default function AdminDashboardShell({
+  adminName,
+  showClients = false,
+  showProducts = true,
+  showAccounts = true,
+  showTransactions = false,
+  showBackToDashboard = false,
+}: AdminDashboardShellProps) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [productsRevision, setProductsRevision] = useState(0);
   const isDark = theme === "dark";
 
   return (
@@ -95,6 +113,38 @@ export default function AdminDashboardShell({ adminName }: AdminDashboardShellPr
           </div>
 
           <div className="flex items-center gap-2">
+            {showBackToDashboard ? (
+              <Link
+                href="/dashboard"
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Dashboard
+              </Link>
+            ) : null}
+            <Link
+              href="/dashboard/clients"
+              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                isDark
+                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+              }`}
+            >
+              Clients
+            </Link>
+            <Link
+              href="/dashboard/transactions"
+              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                isDark
+                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+              }`}
+            >
+              Transactions
+            </Link>
             <button
               type="button"
               onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -112,7 +162,13 @@ export default function AdminDashboardShell({ adminName }: AdminDashboardShellPr
           </div>
         </header>
 
-        <AdminClientsTable theme={theme} />
+        <AdminDashboardMetrics theme={theme} />
+        {showClients ? <AdminClientsTable theme={theme} /> : null}
+        {showProducts ? (
+          <AdminProductsPanel theme={theme} onProductCreated={() => setProductsRevision((prev) => prev + 1)} />
+        ) : null}
+        {showAccounts ? <AdminAccountsPanel theme={theme} refreshKey={productsRevision} /> : null}
+        {showTransactions ? <AdminTransactionsPanel theme={theme} /> : null}
       </section>
     </main>
   );
