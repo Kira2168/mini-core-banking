@@ -125,7 +125,7 @@ export default function AdminLoginPage() {
         <form onSubmit={handleLogin} className="space-y-4">
           <input
             type="text"
-            placeholder="Admin ID"
+            placeholder="Username"
             value={id}
             onChange={(e) => setId(e.target.value)}
             required

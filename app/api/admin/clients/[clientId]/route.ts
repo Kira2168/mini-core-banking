@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
+import { ensurePermission } from "@/lib/permissions";
 
 const VALID_STATUS = new Set(["Active", "Inactive", "Suspended"]);
 const VALID_GENDER = new Set(["Male", "Female", "Other"]);
@@ -14,17 +14,13 @@ const getClientId = (value: string) => {
   return clientId;
 };
 
-const isAuthorized = (request: NextRequest) => {
-  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  return verifyAdminSessionToken(token);
-};
-
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "delete_client");
+  if (denial) {
+    return denial;
   }
 
   const { clientId: clientIdParam } = await params;
@@ -77,8 +73,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "edit_client");
+  if (denial) {
+    return denial;
   }
 
   const { clientId: clientIdParam } = await params;
@@ -118,8 +115,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
 ) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "edit_client");
+  if (denial) {
+    return denial;
   }
 
   const { clientId: clientIdParam } = await params;

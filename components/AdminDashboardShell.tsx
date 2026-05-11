@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
 import AdminClientsTable from "@/components/AdminClientsTable";
@@ -33,7 +33,41 @@ export default function AdminDashboardShell({
 }: AdminDashboardShellProps) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [productsRevision, setProductsRevision] = useState(0);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
   const isDark = theme === "dark";
+
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
+        const result = await response.json();
+        if (response.ok && result?.success) {
+          setPermissions(Array.isArray(result.data?.permissions) ? result.data.permissions : []);
+        } else {
+          setPermissions([]);
+        }
+      } catch {
+        setPermissions([]);
+      }
+    };
+
+    loadPermissions();
+  }, []);
+
+  const permissionSet = useMemo(() => new Set(permissions ?? []), [permissions]);
+  const canViewDashboard = permissionSet.has("view_dashboard");
+  const canViewClients = permissionSet.has("view_clients");
+  const canViewProducts = permissionSet.has("view_products");
+  const canViewAccounts = permissionSet.has("view_accounts");
+  const canViewTransactions = permissionSet.has("view_transactions");
+  const canViewSecurity =
+    permissionSet.has("view_users") || permissionSet.has("view_roles") || permissionSet.has("edit_roles");
+
+  const showClientsSection = showClients && canViewClients;
+  const showProductsSection = showProducts && canViewProducts;
+  const showAccountsSection = showAccounts && canViewAccounts;
+  const showTransactionsSection = showTransactions && canViewTransactions;
+  const showSecuritySection = showSecurity && canViewSecurity;
 
   return (
     <main
@@ -128,36 +162,42 @@ export default function AdminDashboardShell({
                 Dashboard
               </Link>
             ) : null}
-            <Link
-              href="/dashboard/clients"
-              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-                isDark
-                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
-                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
-              }`}
-            >
-              Clients
-            </Link>
-            <Link
-              href="/dashboard/transactions"
-              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-                isDark
-                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
-                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
-              }`}
-            >
-              Transactions
-            </Link>
-            <Link
-              href="/dashboard/security"
-              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
-                isDark
-                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
-                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
-              }`}
-            >
-              Security
-            </Link>
+            {canViewClients ? (
+              <Link
+                href="/dashboard/clients"
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Clients
+              </Link>
+            ) : null}
+            {canViewTransactions ? (
+              <Link
+                href="/dashboard/transactions"
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Transactions
+              </Link>
+            ) : null}
+            {canViewSecurity ? (
+              <Link
+                href="/dashboard/security"
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Security
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -175,14 +215,14 @@ export default function AdminDashboardShell({
           </div>
         </header>
 
-        <AdminDashboardMetrics theme={theme} />
-        {showClients ? <AdminClientsTable theme={theme} /> : null}
-        {showProducts ? (
+        {canViewDashboard ? <AdminDashboardMetrics theme={theme} /> : null}
+        {showClientsSection ? <AdminClientsTable theme={theme} /> : null}
+        {showProductsSection ? (
           <AdminProductsPanel theme={theme} onProductCreated={() => setProductsRevision((prev) => prev + 1)} />
         ) : null}
-        {showAccounts ? <AdminAccountsPanel theme={theme} refreshKey={productsRevision} /> : null}
-        {showTransactions ? <AdminTransactionsPanel theme={theme} /> : null}
-        {showSecurity ? <AdminSecurityPanel theme={theme} /> : null}
+        {showAccountsSection ? <AdminAccountsPanel theme={theme} refreshKey={productsRevision} /> : null}
+        {showTransactionsSection ? <AdminTransactionsPanel theme={theme} /> : null}
+        {showSecuritySection ? <AdminSecurityPanel theme={theme} /> : null}
       </section>
     </main>
   );

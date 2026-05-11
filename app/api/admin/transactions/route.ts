@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
+import { ensurePermission } from "@/lib/permissions";
 
 type Direction = "Credit" | "Debit";
 
@@ -9,11 +9,6 @@ type TypeFilter = "All" | "Cash" | "Transfer";
 
 const VALID_TYPES = new Set<TypeFilter>(["All", "Cash", "Transfer"]);
 const VALID_DIRECTIONS = new Set<Direction>(["Credit", "Debit"]);
-
-const isAuthorized = (request: NextRequest) => {
-  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  return verifyAdminSessionToken(token);
-};
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -31,8 +26,9 @@ const toSafeTypeFilter = (value: string | null): TypeFilter => {
 };
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "view_transactions");
+  if (denial) {
+    return denial;
   }
 
   try {
@@ -95,8 +91,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "post_cash");
+  if (denial) {
+    return denial;
   }
 
   const connection = await db.getConnection();

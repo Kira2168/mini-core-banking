@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
+import { ensurePermission } from "@/lib/permissions";
 
 type CategoryFilter = "All" | "Individual" | "Non-Individual";
 type StatusFilter = "All" | "Active" | "Inactive" | "Suspended";
@@ -25,9 +25,9 @@ const toSafeStatusFilter = (value: string | null): StatusFilter => {
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-    if (!verifyAdminSessionToken(token)) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    const denial = await ensurePermission(request, "view_clients");
+    if (denial) {
+      return denial;
     }
 
     const category = toSafeCategoryFilter(request.nextUrl.searchParams.get("category"));

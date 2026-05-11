@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
+import { ensurePermission } from "@/lib/permissions";
 
 type AccountStatus = "Active" | "Inactive" | "Frozen" | "Closed";
 
 type StatusFilter = "All" | AccountStatus;
 
 const VALID_STATUS_FILTERS = new Set<StatusFilter>(["All", "Active", "Inactive", "Frozen", "Closed"]);
-
-const isAuthorized = (request: NextRequest) => {
-  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  return verifyAdminSessionToken(token);
-};
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -30,8 +25,9 @@ const toSafeStatusFilter = (value: string | null): StatusFilter => {
 };
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "view_accounts");
+  if (denial) {
+    return denial;
   }
 
   try {
@@ -83,8 +79,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "create_account");
+  if (denial) {
+    return denial;
   }
 
   const connection = await db.getConnection();

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import AdminDashboardShell from "@/components/AdminDashboardShell";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
+import { ADMIN_SESSION_COOKIE, decodeAdminSessionToken, verifyAdminSessionToken } from "@/lib/adminAuth";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -10,6 +10,8 @@ export default async function DashboardPage() {
   if (!verifyAdminSessionToken(sessionToken)) {
     redirect("/admin/login");
   }
+  const session = decodeAdminSessionToken(sessionToken);
+  const adminName = session?.username ?? "Admin";
 
-  return <AdminDashboardShell adminName="Kirubel Adisu" />;
+  return <AdminDashboardShell adminName={adminName} />;
 }

@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth";
-
-const isAuthorized = (request: NextRequest) => {
-  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-  return verifyAdminSessionToken(token);
-};
+import { ensurePermission } from "@/lib/permissions";
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -20,8 +15,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ roleId: string }> }
 ) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  const denial = await ensurePermission(request, "edit_roles");
+  if (denial) {
+    return denial;
   }
 
   const { roleId: roleIdParam } = await params;

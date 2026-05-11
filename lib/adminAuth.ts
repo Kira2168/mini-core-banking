@@ -15,41 +15,54 @@ export const validateAdminCredentials = (id: string, password: string) => {
   return id === ADMIN_ID && password === ADMIN_PASSWORD;
 };
 
-export const createAdminSessionToken = (adminId: string) => {
+export type AdminSessionPayload = {
+  userId: number;
+  roleId: number;
+  username: string;
+  expiresAt: number;
+};
+
+export const createAdminSessionToken = (userId: number, roleId: number, username: string) => {
   const expiresAt = Date.now() + 1000 * 60 * 60 * 8;
-  const payload = `${adminId}:${expiresAt}`;
+  const payload = `${userId}:${roleId}:${username}:${expiresAt}`;
   const signature = sign(payload);
   const encodedPayload = Buffer.from(payload, "utf8").toString("base64url");
   return `${encodedPayload}.${signature}`;
 };
 
-export const verifyAdminSessionToken = (token: string | undefined) => {
+export const decodeAdminSessionToken = (token: string | undefined): AdminSessionPayload | null => {
   if (!token) {
-    return false;
+    return null;
   }
 
   const [encodedPayload, signature] = token.split(".");
   if (!encodedPayload || !signature) {
-    return false;
+    return null;
   }
 
   const payload = Buffer.from(encodedPayload, "base64url").toString("utf8");
   const expectedSignature = sign(payload);
 
   if (signature !== expectedSignature) {
-    return false;
+    return null;
   }
 
-  const [adminId, expiresAtRaw] = payload.split(":");
+  const [userIdRaw, roleIdRaw, username, expiresAtRaw] = payload.split(":");
+  const userId = Number(userIdRaw);
+  const roleId = Number(roleIdRaw);
   const expiresAt = Number(expiresAtRaw);
 
-  if (!adminId || Number.isNaN(expiresAt)) {
-    return false;
+  if (!username || Number.isNaN(userId) || Number.isNaN(roleId) || Number.isNaN(expiresAt)) {
+    return null;
   }
 
   if (Date.now() > expiresAt) {
-    return false;
+    return null;
   }
 
-  return adminId === ADMIN_ID;
+  return { userId, roleId, username, expiresAt };
+};
+
+export const verifyAdminSessionToken = (token: string | undefined) => {
+  return Boolean(decodeAdminSessionToken(token));
 };
