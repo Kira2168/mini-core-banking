@@ -10,6 +10,7 @@ import AdminAccountsPanel from "@/components/AdminAccountsPanel";
 import AdminProductsPanel from "@/components/AdminProductsPanel";
 import AdminTransactionsPanel from "@/components/AdminTransactionsPanel";
 import AdminDashboardMetrics from "@/components/AdminDashboardMetrics";
+import AdminSecurityPanel from "@/components/AdminSecurityPanel";
 
 type AdminDashboardShellProps = {
   adminName: string;
@@ -18,6 +19,7 @@ type AdminDashboardShellProps = {
   showAccounts?: boolean;
   showTransactions?: boolean;
   showBackToDashboard?: boolean;
+  showSecurity?: boolean;
 };
 
 export default function AdminDashboardShell({
@@ -27,6 +29,7 @@ export default function AdminDashboardShell({
   showAccounts = true,
   showTransactions = false,
   showBackToDashboard = false,
+  showSecurity = false,
 }: AdminDashboardShellProps) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [productsRevision, setProductsRevision] = useState(0);
@@ -145,6 +148,16 @@ export default function AdminDashboardShell({
             >
               Transactions
             </Link>
+            <Link
+              href="/dashboard/security"
+              className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                isDark
+                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+              }`}
+            >
+              Security
+            </Link>
             <button
               type="button"
               onClick={() => setTheme(isDark ? "light" : "dark")}
@@ -169,6 +182,7 @@ export default function AdminDashboardShell({
         ) : null}
         {showAccounts ? <AdminAccountsPanel theme={theme} refreshKey={productsRevision} /> : null}
         {showTransactions ? <AdminTransactionsPanel theme={theme} /> : null}
+        {showSecurity ? <AdminSecurityPanel theme={theme} /> : null}
       </section>
     </main>
   );
