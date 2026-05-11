@@ -100,13 +100,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const accountId = toPositiveInt(String(body?.accountId ?? "").trim());
+    const accountValue = String(body?.accountId ?? "").trim();
+    const accountId = toPositiveInt(accountValue);
     const direction = String(body?.direction ?? "").trim() as Direction;
     const amountRaw = String(body?.amount ?? "").trim();
     const amount = Number(amountRaw);
     const reference = String(body?.reference ?? "").trim() || null;
 
-    if (!accountId) {
+    if (!accountValue) {
       return NextResponse.json({ success: false, error: "Account id is required." }, { status: 400 });
     }
 
@@ -123,8 +124,13 @@ export async function POST(request: NextRequest) {
     await connection.beginTransaction();
 
     const [accountRows]: any = await connection.execute(
-      `SELECT balance FROM accounts WHERE account_id = ? FOR UPDATE`,
-      [accountId]
+      `
+      SELECT account_id AS accountId, account_number AS accountNumber, balance
+      FROM accounts
+      WHERE account_id = ? OR account_number = ?
+      FOR UPDATE
+      `,
+      [accountId ?? -1, accountValue]
     );
 
     if (!accountRows.length) {
@@ -132,17 +138,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Account not found." }, { status: 404 });
     }
 
-    const currentBalance = Number(accountRows[0].balance ?? 0);
+    const matchedRow =
+      accountRows.find((row: any) => String(row.accountNumber) === accountValue) ?? accountRows[0];
+    const resolvedAccountId = Number(matchedRow.accountId);
+    const currentBalance = Number(matchedRow.balance ?? 0);
     const newBalance = currentBalance + signedAmount;
 
-    await connection.execute(`UPDATE accounts SET balance = ? WHERE account_id = ?`, [newBalance, accountId]);
+    await connection.execute(`UPDATE accounts SET balance = ? WHERE account_id = ?`, [newBalance, resolvedAccountId]);
 
     const [result]: any = await connection.execute(
       `
       INSERT INTO transactions (account_id, transaction_type, direction, amount, reference)
       VALUES (?, 'Cash', ?, ?, ?)
       `,
-      [accountId, direction, signedAmount, reference]
+      [resolvedAccountId, direction, signedAmount, reference]
     );
 
     await connection.commit();
@@ -151,7 +160,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         transactionId: result.insertId,
-        accountId,
+        accountId: resolvedAccountId,
         newBalance,
       },
     });

@@ -4,14 +4,22 @@ import { verifyPassword } from "@/lib/security";
 import {
   ADMIN_SESSION_COOKIE,
   createAdminSessionToken,
-  validateAdminCredentials,
+  validateRoleCredentials,
 } from "@/lib/adminAuth";
+
+const ALLOWED_ROLES = new Set(["Admin", "Manager", "Officer", "Super Admin"]);
+
+const normalizeRole = (value: unknown) => {
+  const role = String(value ?? "").trim();
+  return ALLOWED_ROLES.has(role) ? role : null;
+};
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const id = String(body?.id ?? "").trim();
     const password = String(body?.password ?? "").trim();
+    const selectedRole = normalizeRole(body?.role) ?? "Admin";
 
     if (!id || !password) {
       return NextResponse.json(
@@ -61,7 +69,7 @@ export async function POST(request: Request) {
       return response;
     }
 
-    if (!validateAdminCredentials(id, password)) {
+    if (!validateRoleCredentials(selectedRole, id, password)) {
       return NextResponse.json(
         { success: false, error: "Invalid admin credentials." },
         { status: 401 }
@@ -69,9 +77,17 @@ export async function POST(request: Request) {
     }
 
     const [roleRows]: any = await db.execute(
-      `SELECT role_id AS roleId FROM roles WHERE role_name = 'Super Admin' LIMIT 1`
+      `SELECT role_id AS roleId FROM roles WHERE role_name = ? LIMIT 1`,
+      [selectedRole]
     );
-    const roleId = Number(roleRows?.[0]?.roleId ?? 1);
+    const roleId = Number(roleRows?.[0]?.roleId ?? (selectedRole === "Super Admin" ? 1 : 0));
+
+    if (!Number.isInteger(roleId) || roleId <= 0) {
+      return NextResponse.json(
+        { success: false, error: "Role is not configured." },
+        { status: 500 }
+      );
+    }
 
     const response = NextResponse.json({ success: true });
     response.cookies.set({

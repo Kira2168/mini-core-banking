@@ -10,20 +10,45 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await db.execute(
+      `
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        setting_key VARCHAR(64) PRIMARY KEY,
+        setting_value VARCHAR(255) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+      `
+    );
+
+    const [resetRows]: any = await db.execute(
+      `SELECT setting_value AS settingValue FROM admin_settings WHERE setting_key = 'dashboard_reset_at' LIMIT 1`
+    );
+    const resetAt = resetRows?.[0]?.settingValue ?? null;
+
     const [clientWeekRows]: any = await db.execute(
       `
       SELECT COUNT(*) AS total
       FROM Client_Master
-      WHERE registration_date >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      WHERE registration_date >= GREATEST(
+        IFNULL(?, '1970-01-01'),
+        DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      )
       `
+      ,
+      [resetAt]
     );
 
     const [clientMonthRows]: any = await db.execute(
       `
       SELECT COUNT(*) AS total
       FROM Client_Master
-      WHERE registration_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+      WHERE registration_date >= GREATEST(
+        IFNULL(?, '1970-01-01'),
+        DATE_FORMAT(CURDATE(), '%Y-%m-01')
+      )
       `
+      ,
+      [resetAt]
     );
 
     const [cashWeekRows]: any = await db.execute(
@@ -31,8 +56,13 @@ export async function GET(request: NextRequest) {
       SELECT COUNT(*) AS total
       FROM transactions
       WHERE transaction_type = 'Cash'
-        AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        AND created_at >= GREATEST(
+          IFNULL(?, '1970-01-01'),
+          DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        )
       `
+      ,
+      [resetAt]
     );
 
     const [transferWeekRows]: any = await db.execute(
@@ -40,8 +70,13 @@ export async function GET(request: NextRequest) {
       SELECT COUNT(*) AS total
       FROM transactions
       WHERE transaction_type = 'Transfer'
-        AND created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        AND created_at >= GREATEST(
+          IFNULL(?, '1970-01-01'),
+          DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        )
       `
+      ,
+      [resetAt]
     );
 
     const [topTransactionsRows]: any = await db.execute(
@@ -54,10 +89,15 @@ export async function GET(request: NextRequest) {
         t.created_at AS createdAt,
         t.account_id AS accountId
       FROM transactions t
-      WHERE t.created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      WHERE t.created_at >= GREATEST(
+        IFNULL(?, '1970-01-01'),
+        DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+      )
       ORDER BY ABS(t.amount) DESC
       LIMIT 5
       `
+      ,
+      [resetAt]
     );
 
     const [topAccountsRows]: any = await db.execute(
@@ -68,9 +108,12 @@ export async function GET(request: NextRequest) {
         client_id AS clientId,
         balance AS balance
       FROM accounts
+      WHERE created_at >= IFNULL(?, '1970-01-01')
       ORDER BY balance DESC
       LIMIT 5
       `
+      ,
+      [resetAt]
     );
 
     return NextResponse.json({

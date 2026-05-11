@@ -10,6 +10,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [id, setId] = useState("");
+  const [role, setRole] = useState("Admin");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +25,7 @@ export default function AdminLoginPage() {
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, password }),
+        body: JSON.stringify({ id, password, role }),
       });
 
       const result = await response.json();
@@ -135,6 +136,21 @@ export default function AdminLoginPage() {
                 : "border-[#a6cbc6] bg-[#fbfffe] text-[#173d42] focus:border-[#1ea696]"
             }`}
           />
+
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className={`w-full rounded-xl border p-3 outline-none transition-colors ${
+              isDark
+                ? "border-[#22414d] bg-[#0a2029] text-[#e6f4f2] focus:border-[#2dc7b8]"
+                : "border-[#a6cbc6] bg-[#fbfffe] text-[#173d42] focus:border-[#1ea696]"
+            }`}
+          >
+            <option value="Admin">Admin</option>
+            <option value="Manager">Manager</option>
+            <option value="Officer">Officer</option>
+            <option value="Super Admin">Super Admin</option>
+          </select>
 
           <input
             type="password"

@@ -251,7 +251,7 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
             <input
               type="number"
               min="1"
-              placeholder="Account ID"
+              placeholder="Account ID or Number"
               value={cashForm.accountId}
               onChange={(event) => setCashForm((prev) => ({ ...prev, accountId: event.target.value }))}
               className={`rounded-xl border p-3 text-sm outline-none ${field}`}
@@ -301,7 +301,7 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
             <input
               type="number"
               min="1"
-              placeholder="From Account ID"
+              placeholder="From Account ID or Number"
               value={transferForm.fromAccountId}
               onChange={(event) => setTransferForm((prev) => ({ ...prev, fromAccountId: event.target.value }))}
               className={`rounded-xl border p-3 text-sm outline-none ${field}`}
@@ -309,7 +309,7 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
             <input
               type="number"
               min="1"
-              placeholder="To Account ID"
+              placeholder="To Account ID or Number"
               value={transferForm.toAccountId}
               onChange={(event) => setTransferForm((prev) => ({ ...prev, toAccountId: event.target.value }))}
               className={`rounded-xl border p-3 text-sm outline-none ${field}`}

@@ -138,10 +138,10 @@ export async function POST(request: NextRequest) {
 
     const [result]: any = await connection.execute(
       `
-      INSERT INTO accounts (branch_id, product_id, client_id, account_number)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO accounts (branch_id, product_id, client_id, account_number, balance)
+      VALUES (?, ?, ?, ?, ?)
       `,
-      [branchId, productId, clientId, accountNumber]
+      [branchId, productId, clientId, accountNumber, 100]
     );
 
     await connection.commit();

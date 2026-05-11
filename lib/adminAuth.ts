@@ -1,7 +1,13 @@
 import crypto from "crypto";
 
-const ADMIN_ID = process.env.ADMIN_ID ?? "kirubel";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "kira2168";
+const SUPER_ADMIN_USER = process.env.SUPER_ADMIN_USER ?? "kirubel";
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD ?? "kira2168";
+const ADMIN_USER = process.env.ADMIN_USER ?? process.env.ADMIN_ID ?? "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "admin1";
+const MANAGER_USER = process.env.MANAGER_USER ?? "manager";
+const MANAGER_PASSWORD = process.env.MANAGER_PASSWORD ?? "manager1";
+const OFFICER_USER = process.env.OFFICER_USER ?? "officer";
+const OFFICER_PASSWORD = process.env.OFFICER_PASSWORD ?? "officer1";
 const ADMIN_SESSION_SECRET =
   process.env.ADMIN_SESSION_SECRET ?? "change-this-admin-session-secret";
 
@@ -12,7 +18,27 @@ const sign = (value: string) => {
 };
 
 export const validateAdminCredentials = (id: string, password: string) => {
-  return id === ADMIN_ID && password === ADMIN_PASSWORD;
+  return id === SUPER_ADMIN_USER && password === SUPER_ADMIN_PASSWORD;
+};
+
+export const validateRoleCredentials = (role: string, id: string, password: string) => {
+  if (role === "Super Admin") {
+    return id === SUPER_ADMIN_USER && password === SUPER_ADMIN_PASSWORD;
+  }
+
+  if (role === "Admin") {
+    return id === ADMIN_USER && password === ADMIN_PASSWORD;
+  }
+
+  if (role === "Manager") {
+    return id === MANAGER_USER && password === MANAGER_PASSWORD;
+  }
+
+  if (role === "Officer") {
+    return id === OFFICER_USER && password === OFFICER_PASSWORD;
+  }
+
+  return false;
 };
 
 export type AdminSessionPayload = {

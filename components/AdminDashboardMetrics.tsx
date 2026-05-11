@@ -38,6 +38,10 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const cardBase = isDark ? "border-[#27464e] bg-[#0a1f27]/90" : "border-[#a8cdc8] bg-[#f3fffd]/95";
   const cardTitle = isDark ? "text-[#80bab3]" : "text-[#317a72]";
@@ -49,6 +53,18 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
   const tableBody = isDark ? "text-[#d9efeb]" : "text-[#234f53]";
   const tableRow = isDark ? "border-[#14262d]" : "border-[#d5e8e5]";
   const emptyText = isDark ? "text-[#9db8b4]" : "text-[#5a7f7b]";
+
+  const loadSession = async () => {
+    try {
+      const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
+      const result: ApiResponse<{ roleName: string }> = await response.json();
+      if (response.ok && result.success) {
+        setIsSuperAdmin(result.data?.roleName === "Super Admin");
+      }
+    } catch {
+      setIsSuperAdmin(false);
+    }
+  };
 
   const loadMetrics = async () => {
     setLoading(true);
@@ -76,7 +92,31 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
 
   useEffect(() => {
     loadMetrics();
+    loadSession();
   }, []);
+
+  const handleReset = async () => {
+    setResetting(true);
+    setResetError("");
+    setResetSuccess("");
+
+    try {
+      const response = await fetch("/api/admin/dashboard/reset", { method: "POST" });
+      const result: ApiResponse<{ resetAt: string }> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setResetError(result.error ?? "Failed to clear dashboard.");
+        return;
+      }
+
+      setResetSuccess("Dashboard metrics cleared.");
+      await loadMetrics();
+    } catch {
+      setResetError("Failed to clear dashboard.");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const summaryCards = useMemo(() => {
     return [
@@ -118,7 +158,33 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
       <div className={`mt-6 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className={`text-lg font-semibold ${heading}`}>Top Transactions This Week</h2>
+          {isSuperAdmin ? (
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={resetting}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                isDark
+                  ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                  : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+              } ${resetting ? "opacity-70" : ""}`}
+            >
+              {resetting ? "Clearing..." : "Clear Dashboard"}
+            </button>
+          ) : null}
         </div>
+
+        {resetError ? (
+          <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {resetError}
+          </p>
+        ) : null}
+
+        {resetSuccess ? (
+          <p className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+            {resetSuccess}
+          </p>
+        ) : null}
 
         {error ? (
           <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
