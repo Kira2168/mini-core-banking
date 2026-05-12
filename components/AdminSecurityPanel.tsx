@@ -56,6 +56,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [roleForm, setRoleForm] = useState<RoleFormState>({ roleName: "", description: "" });
   const [userForm, setUserForm] = useState<UserFormState>({
     username: "",
@@ -90,6 +91,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
   const loadAll = async () => {
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
       const [rolesRes, permissionsRes, usersRes] = await Promise.all([
@@ -131,6 +133,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
 
   const createRole = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSuccess("");
 
     const roleName = roleForm.roleName.trim();
     if (!roleName) {
@@ -161,6 +164,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
 
   const createUser = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSuccess("");
 
     const username = userForm.username.trim();
     const email = userForm.email.trim();
@@ -187,6 +191,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       }
 
       setUserForm({ username: "", email: "", password: "", roleId: "" });
+      setSuccess("User created successfully.");
       await loadAll();
     } catch {
       setError("Failed to create user.");
@@ -208,6 +213,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
 
   const saveRoleEdit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSuccess("");
 
     if (!editingRole || !roleEditForm) {
       return;
@@ -234,6 +240,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       }
 
       closeRoleEdit();
+      setSuccess("Role updated successfully.");
       await loadAll();
     } catch {
       setError("Failed to update role.");
@@ -246,6 +253,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
     }
 
     setSavingRolePermissions(true);
+    setSuccess("");
 
     try {
       const response = await fetch(`/api/admin/security/roles/${editingRole.roleId}/permissions`, {
@@ -261,6 +269,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
         return;
       }
 
+      setSuccess("Permissions updated successfully.");
       await loadAll();
     } catch {
       setError("Failed to update permissions.");
@@ -274,6 +283,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
     if (!confirmDelete) {
       return;
     }
+    setSuccess("");
 
     try {
       const response = await fetch(`/api/admin/security/roles/${roleId}`, { method: "DELETE" });
@@ -284,6 +294,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
         return;
       }
 
+      setSuccess("Role deleted successfully.");
       await loadAll();
     } catch {
       setError("Delete failed.");
@@ -298,6 +309,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       roleId: String(user.roleId),
       password: "",
     });
+    setSuccess("");
   };
 
   const closeUserEdit = () => {
@@ -307,6 +319,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
 
   const saveUserEdit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSuccess("");
 
     if (!editingUser || !userEditForm) {
       return;
@@ -341,6 +354,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       }
 
       closeUserEdit();
+      setSuccess("User updated successfully.");
       await loadAll();
     } catch {
       setError("Failed to update user.");
@@ -352,6 +366,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
     if (!confirmDelete) {
       return;
     }
+    setSuccess("");
 
     try {
       const response = await fetch(`/api/admin/security/users/${userId}`, { method: "DELETE" });
@@ -362,6 +377,7 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
         return;
       }
 
+      setSuccess("User deleted successfully.");
       await loadAll();
     } catch {
       setError("Delete failed.");
@@ -394,6 +410,12 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       {error ? (
         <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {error}
+        </p>
+      ) : null}
+
+      {success ? (
+        <p className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+          {success}
         </p>
       ) : null}
 

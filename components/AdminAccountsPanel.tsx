@@ -53,6 +53,7 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
   const [error, setError] = useState("");
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
+  const [canCreateAccount, setCanCreateAccount] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [productFilter, setProductFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -134,6 +135,23 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
   }, [refreshKey]);
 
   useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
+        const result: ApiResponse<{ permissions: string[] }> = await response.json();
+        if (response.ok && result?.success) {
+          const permissionSet = new Set(result.data?.permissions ?? []);
+          setCanCreateAccount(permissionSet.has("create_account"));
+        }
+      } catch {
+        setCanCreateAccount(false);
+      }
+    };
+
+    loadPermissions();
+  }, []);
+
+  useEffect(() => {
     loadAccounts();
   }, [statusFilter, productFilter]);
 
@@ -199,43 +217,45 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
         <span className={`rounded-full border px-3 py-1 text-xs ${badge}`}>{filteredLabel}</span>
       </div>
 
-      <form onSubmit={handleCreate} className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-        <input
-          type="number"
-          min="1"
-          placeholder="Branch ID"
-          value={createForm.branchId}
-          onChange={(event) => setCreateForm((prev) => ({ ...prev, branchId: event.target.value }))}
-          className={`rounded-xl border p-3 text-sm outline-none ${field}`}
-        />
-        <input
-          type="number"
-          min="1"
-          placeholder="Client ID"
-          value={createForm.clientId}
-          onChange={(event) => setCreateForm((prev) => ({ ...prev, clientId: event.target.value }))}
-          className={`rounded-xl border p-3 text-sm outline-none ${field}`}
-        />
-        <select
-          value={createForm.productId}
-          onChange={(event) => setCreateForm((prev) => ({ ...prev, productId: event.target.value }))}
-          className={`rounded-xl border p-3 text-sm outline-none ${field}`}
-          disabled={loadingProducts}
-        >
-          <option value="">Select product</option>
-          {products.map((product) => (
-            <option key={product.productId} value={product.productId}>
-              {product.productName}
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-xl bg-[#2dc7b8] px-4 py-3 text-sm font-semibold text-[#03272b] transition-colors hover:bg-[#43ded0]"
-        >
-          Create Account
-        </button>
-      </form>
+      {canCreateAccount ? (
+        <form onSubmit={handleCreate} className="mb-5 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+          <input
+            type="number"
+            min="1"
+            placeholder="Branch ID"
+            value={createForm.branchId}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, branchId: event.target.value }))}
+            className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+          />
+          <input
+            type="number"
+            min="1"
+            placeholder="Client ID"
+            value={createForm.clientId}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, clientId: event.target.value }))}
+            className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+          />
+          <select
+            value={createForm.productId}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, productId: event.target.value }))}
+            className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+            disabled={loadingProducts}
+          >
+            <option value="">Select product</option>
+            {products.map((product) => (
+              <option key={product.productId} value={product.productId}>
+                {product.productName}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="rounded-xl bg-[#2dc7b8] px-4 py-3 text-sm font-semibold text-[#03272b] transition-colors hover:bg-[#43ded0]"
+          >
+            Create Account
+          </button>
+        </form>
+      ) : null}
 
       {createError ? (
         <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
