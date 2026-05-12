@@ -68,6 +68,8 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [roleEditForm, setRoleEditForm] = useState<RoleFormState | null>(null);
   const [userEditForm, setUserEditForm] = useState<{ email: string; status: "Active" | "Inactive"; roleId: string; password: string } | null>(null);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
   const [savingRolePermissions, setSavingRolePermissions] = useState(false);
 
@@ -309,12 +311,16 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       roleId: String(user.roleId),
       password: "",
     });
+    setConfirmPassword("");
+    setResetPasswordValue("");
     setSuccess("");
   };
 
   const closeUserEdit = () => {
     setEditingUser(null);
     setUserEditForm(null);
+    setConfirmPassword("");
+    setResetPasswordValue("");
   };
 
   const saveUserEdit = async (event: React.FormEvent) => {
@@ -328,9 +334,15 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
     const email = userEditForm.email.trim();
     const roleId = Number(userEditForm.roleId);
     const password = userEditForm.password.trim();
+    const confirm = confirmPassword.trim();
 
     if (!email || !Number.isInteger(roleId) || roleId <= 0) {
       setError("Email and role are required.");
+      return;
+    }
+
+    if (password && password !== confirm) {
+      setError("Passwords do not match.");
       return;
     }
 
@@ -358,6 +370,33 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
       await loadAll();
     } catch {
       setError("Failed to update user.");
+    }
+  };
+
+  const resetUserPassword = async () => {
+    if (!editingUser) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setResetPasswordValue("");
+
+    try {
+      const response = await fetch(`/api/admin/security/users/${editingUser.userId}/reset-password`, {
+        method: "POST",
+      });
+      const result: ApiResponse<{ temporaryPassword: string }> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to reset password.");
+        return;
+      }
+
+      setResetPasswordValue(result.data.temporaryPassword);
+      setSuccess("Password reset successfully.");
+    } catch {
+      setError("Failed to reset password.");
     }
   };
 
@@ -738,11 +777,34 @@ export default function AdminSecurityPanel({ theme }: AdminSecurityPanelProps) {
                 onChange={(event) => setUserEditForm((prev) => (prev ? { ...prev, password: event.target.value } : prev))}
                 className={`rounded-xl border p-3 text-sm outline-none ${field}`}
               />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+              />
+              {resetPasswordValue ? (
+                <div className="rounded-xl border border-amber-300/40 bg-amber-200/10 px-3 py-2 text-sm text-amber-100">
+                  Temporary password: <span className="font-semibold">{resetPasswordValue}</span>
+                </div>
+              ) : null}
               <button
                 type="submit"
                 className="rounded-xl bg-[#2dc7b8] px-4 py-3 text-sm font-semibold text-[#03272b] transition-colors hover:bg-[#43ded0]"
               >
                 Save User
+              </button>
+              <button
+                type="button"
+                onClick={resetUserPassword}
+                className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Reset Password
               </button>
             </form>
           </section>
