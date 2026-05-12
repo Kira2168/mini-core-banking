@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ensurePermission } from "@/lib/permissions";
+import { ensurePermission, getRoleNameById, getSessionFromRequest } from "@/lib/permissions";
 
 type AccountStatus = "Active" | "Inactive" | "Frozen" | "Closed";
 
@@ -42,6 +42,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid product id." }, { status: 400 });
     }
 
+    const session = getSessionFromRequest(request);
+    const roleName = session ? await getRoleNameById(session.roleId) : null;
+    const canViewBalance = roleName === "Manager" || roleName === "Super Admin";
+
     const [rows]: any = await db.execute(
       `
       SELECT
@@ -69,7 +73,12 @@ export async function GET(request: NextRequest) {
       [status, status, productId, productId, search, search, search, limit]
     );
 
-    return NextResponse.json({ success: true, data: rows ?? [] });
+    const data = (rows ?? []).map((row: any) => ({
+      ...row,
+      balance: canViewBalance ? row.balance : null,
+    }));
+
+    return NextResponse.json({ success: true, data });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message ?? "Failed to fetch accounts." },

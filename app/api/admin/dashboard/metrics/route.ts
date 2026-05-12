@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ensurePermission } from "@/lib/permissions";
+import { ensurePermission, getRoleNameById, getSessionFromRequest } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   const denial = await ensurePermission(request, "view_dashboard");
@@ -100,6 +100,10 @@ export async function GET(request: NextRequest) {
       [resetAt]
     );
 
+    const session = getSessionFromRequest(request);
+    const roleName = session ? await getRoleNameById(session.roleId) : null;
+    const canViewBalance = roleName === "Manager" || roleName === "Super Admin";
+
     const [topAccountsRows]: any = await db.execute(
       `
       SELECT
@@ -116,6 +120,11 @@ export async function GET(request: NextRequest) {
       [resetAt]
     );
 
+    const maskedTopAccounts = (topAccountsRows ?? []).map((row: any) => ({
+      ...row,
+      balance: canViewBalance ? row.balance : null,
+    }));
+
     return NextResponse.json({
       success: true,
       data: {
@@ -124,7 +133,7 @@ export async function GET(request: NextRequest) {
         cashTransactionsWeek: Number(cashWeekRows?.[0]?.total ?? 0),
         transferTransactionsWeek: Number(transferWeekRows?.[0]?.total ?? 0),
         topTransactionsWeek: topTransactionsRows ?? [],
-        topAccountsByBalance: topAccountsRows ?? [],
+        topAccountsByBalance: maskedTopAccounts,
       },
     });
   } catch (error: any) {

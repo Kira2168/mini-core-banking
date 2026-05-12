@@ -54,6 +54,11 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
   const [canCreateAccount, setCanCreateAccount] = useState(false);
+  const [canEditAccount, setCanEditAccount] = useState(false);
+  const [canViewBalance, setCanViewBalance] = useState(false);
+  const [editSuccess, setEditSuccess] = useState("");
+  const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
+  const [editStatus, setEditStatus] = useState<AccountStatus>("Active");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [productFilter, setProductFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -142,9 +147,14 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
         if (response.ok && result?.success) {
           const permissionSet = new Set(result.data?.permissions ?? []);
           setCanCreateAccount(permissionSet.has("create_account"));
+          setCanEditAccount(permissionSet.has("edit_account"));
+          const roleName = result.data?.roleName ?? "";
+          setCanViewBalance(roleName === "Manager" || roleName === "Super Admin");
         }
       } catch {
         setCanCreateAccount(false);
+        setCanEditAccount(false);
+        setCanViewBalance(false);
       }
     };
 
@@ -164,6 +174,7 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
     event.preventDefault();
     setCreateError("");
     setCreateSuccess("");
+    setEditSuccess("");
 
     const branchId = Number(createForm.branchId);
     const clientId = Number(createForm.clientId);
@@ -209,6 +220,46 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
   const filteredLabel = useMemo(() => {
     return `${accounts.length} result${accounts.length === 1 ? "" : "s"}`;
   }, [accounts.length]);
+
+  const openEdit = (account: AccountRow) => {
+    setEditingAccount(account);
+    setEditStatus(account.status);
+    setEditSuccess("");
+  };
+
+  const closeEdit = () => {
+    setEditingAccount(null);
+  };
+
+  const saveEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingAccount) {
+      return;
+    }
+
+    setEditSuccess("");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/admin/accounts/${editingAccount.accountId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: editStatus }),
+      });
+      const result: ApiResponse<unknown> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to update account.");
+        return;
+      }
+
+      setEditSuccess("Account status updated successfully.");
+      closeEdit();
+      await loadAccounts();
+    } catch {
+      setError("Failed to update account.");
+    }
+  };
 
   return (
     <section className={`mt-8 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
@@ -269,6 +320,12 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
         </p>
       ) : null}
 
+      {editSuccess ? (
+        <p className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+          {editSuccess}
+        </p>
+      ) : null}
+
       {error ? (
         <p className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {error}
@@ -325,21 +382,22 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
               <th className="px-3 py-2 font-medium">Client ID</th>
               <th className="px-3 py-2 font-medium">Product</th>
               <th className="px-3 py-2 font-medium">Branch</th>
-              <th className="px-3 py-2 font-medium">Balance</th>
+                {canViewBalance ? <th className="px-3 py-2 font-medium">Balance</th> : null}
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Created</th>
+              {canEditAccount ? <th className="px-3 py-2 font-medium">Actions</th> : null}
             </tr>
           </thead>
           <tbody className={tableBody}>
             {loading ? (
               <tr>
-                <td className={`px-3 py-6 ${emptyText}`} colSpan={7}>
+                <td className={`px-3 py-6 ${emptyText}`} colSpan={canEditAccount ? 8 : 7}>
                   Loading accounts...
                 </td>
               </tr>
             ) : accounts.length === 0 ? (
               <tr>
-                <td className={`px-3 py-6 ${emptyText}`} colSpan={7}>
+                <td className={`px-3 py-6 ${emptyText}`} colSpan={canEditAccount ? 8 : 7}>
                   No accounts found for your selection.
                 </td>
               </tr>
@@ -350,15 +408,89 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
                   <td className="px-3 py-3">{account.clientId}</td>
                   <td className="px-3 py-3">{account.productName}</td>
                   <td className="px-3 py-3">{account.branchId}</td>
-                  <td className="px-3 py-3">{Number(account.balance).toFixed(2)}</td>
+                  {canViewBalance ? (
+                    <td className="px-3 py-3">{Number(account.balance ?? 0).toFixed(2)}</td>
+                  ) : null}
                   <td className="px-3 py-3">{account.status}</td>
                   <td className="px-3 py-3">{new Date(account.createdAt).toLocaleString()}</td>
+                  {canEditAccount ? (
+                    <td className="px-3 py-3">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(account)}
+                        className="rounded-lg border border-[#406089] bg-[#122339] px-3 py-1 text-xs font-semibold text-[#bfddff] transition-colors hover:bg-[#1b3452]"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {editingAccount ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/55" onClick={closeEdit} />
+          <section
+            className={`relative z-10 w-full max-w-md rounded-2xl border p-5 backdrop-blur-xl ${
+              isDark ? "border-[#2a4450] bg-[#081822]/95" : "border-[#b8d2ce] bg-[#f9fffd]/95"
+            }`}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-xs uppercase tracking-[0.22em] ${isDark ? "text-[#8bc6c0]" : "text-[#317a72]"}`}>
+                  Edit Account Status
+                </p>
+                <h3 className={`mt-1 text-xl font-bold ${heading}`}>{editingAccount.accountNumber}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeEdit}
+                className={`rounded-lg border px-2.5 py-1 text-sm ${
+                  isDark ? "border-[#35535b] text-[#b9d9d4]" : "border-[#a8c9c4] text-[#2b6460]"
+                }`}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit} className="space-y-3">
+              <select
+                value={editStatus}
+                onChange={(event) => setEditStatus(event.target.value as AccountStatus)}
+                className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+              >
+                {STATUS_FILTERS.filter((status) => status !== "All").map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="1"
+                placeholder="Branch ID"
+                value={editingAccount.branchId}
+                onChange={(event) =>
+                  setEditingAccount((prev) =>
+                    prev ? { ...prev, branchId: Number(event.target.value) } : prev
+                  )
+                }
+                className={`rounded-xl border p-3 text-sm outline-none ${field}`}
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-[#2dc7b8] px-4 py-3 text-sm font-semibold text-[#03272b] transition-colors hover:bg-[#43ded0]"
+              >
+                Save Status
+              </button>
+            </form>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -42,6 +42,7 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [canViewBalance, setCanViewBalance] = useState(false);
 
   const cardBase = isDark ? "border-[#27464e] bg-[#0a1f27]/90" : "border-[#a8cdc8] bg-[#f3fffd]/95";
   const cardTitle = isDark ? "text-[#80bab3]" : "text-[#317a72]";
@@ -59,10 +60,13 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
       const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
       const result: ApiResponse<{ roleName: string }> = await response.json();
       if (response.ok && result.success) {
-        setIsSuperAdmin(result.data?.roleName === "Super Admin");
+        const roleName = result.data?.roleName ?? "";
+        setIsSuperAdmin(roleName === "Super Admin");
+        setCanViewBalance(roleName === "Manager" || roleName === "Super Admin");
       }
     } catch {
       setIsSuperAdmin(false);
+      setCanViewBalance(false);
     }
   };
 
@@ -232,48 +236,50 @@ export default function AdminDashboardMetrics({ theme }: AdminDashboardMetricsPr
         </div>
       </div>
 
-      <div className={`mt-6 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className={`text-lg font-semibold ${heading}`}>Top Accounts by Balance</h2>
-        </div>
+      {canViewBalance ? (
+        <div className={`mt-6 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className={`text-lg font-semibold ${heading}`}>Top Accounts by Balance</h2>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-190 border-collapse text-left text-sm">
-            <thead>
-              <tr className={`border-b ${tableHead}`}>
-                <th className="px-3 py-2 font-medium">Account</th>
-                <th className="px-3 py-2 font-medium">Client</th>
-                <th className="px-3 py-2 font-medium">Balance</th>
-              </tr>
-            </thead>
-            <tbody className={tableBody}>
-              {loading ? (
-                <tr>
-                  <td className={`px-3 py-6 ${emptyText}`} colSpan={3}>
-                    Loading accounts...
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-190 border-collapse text-left text-sm">
+              <thead>
+                <tr className={`border-b ${tableHead}`}>
+                  <th className="px-3 py-2 font-medium">Account</th>
+                  <th className="px-3 py-2 font-medium">Client</th>
+                  <th className="px-3 py-2 font-medium">Balance</th>
                 </tr>
-              ) : metrics?.topAccountsByBalance?.length ? (
-                metrics.topAccountsByBalance.map((account) => (
-                  <tr key={account.accountId} className={`border-b ${tableRow}`}>
-                    <td className="px-3 py-3">
-                      {account.accountNumber} (#{account.accountId})
+              </thead>
+              <tbody className={tableBody}>
+                {loading ? (
+                  <tr>
+                    <td className={`px-3 py-6 ${emptyText}`} colSpan={3}>
+                      Loading accounts...
                     </td>
-                    <td className="px-3 py-3">{account.clientId}</td>
-                    <td className="px-3 py-3">{Number(account.balance).toFixed(2)}</td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className={`px-3 py-6 ${emptyText}`} colSpan={3}>
-                    No accounts available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ) : metrics?.topAccountsByBalance?.length ? (
+                  metrics.topAccountsByBalance.map((account) => (
+                    <tr key={account.accountId} className={`border-b ${tableRow}`}>
+                      <td className="px-3 py-3">
+                        {account.accountNumber} (#{account.accountId})
+                      </td>
+                      <td className="px-3 py-3">{account.clientId}</td>
+                      <td className="px-3 py-3">{Number(account.balance ?? 0).toFixed(2)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className={`px-3 py-6 ${emptyText}`} colSpan={3}>
+                      No accounts available.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
