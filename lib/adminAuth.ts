@@ -2,8 +2,6 @@ import crypto from "crypto";
 
 const SUPER_ADMIN_USER = process.env.SUPER_ADMIN_USER ?? "kirubel";
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD ?? "kira2168";
-const ADMIN_USER = process.env.ADMIN_USER ?? process.env.ADMIN_ID ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "admin1";
 const MANAGER_USER = process.env.MANAGER_USER ?? "manager";
 const MANAGER_PASSWORD = process.env.MANAGER_PASSWORD ?? "manager1";
 const OFFICER_USER = process.env.OFFICER_USER ?? "officer";
@@ -24,10 +22,6 @@ export const validateAdminCredentials = (id: string, password: string) => {
 export const validateRoleCredentials = (role: string, id: string, password: string) => {
   if (role === "Super Admin") {
     return id === SUPER_ADMIN_USER && password === SUPER_ADMIN_PASSWORD;
-  }
-
-  if (role === "Admin") {
-    return id === ADMIN_USER && password === ADMIN_PASSWORD;
   }
 
   if (role === "Manager") {

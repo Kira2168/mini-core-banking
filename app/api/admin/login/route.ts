@@ -7,7 +7,7 @@ import {
   validateRoleCredentials,
 } from "@/lib/adminAuth";
 
-const ALLOWED_ROLES = new Set(["Admin", "Manager", "Officer", "Super Admin"]);
+const ALLOWED_ROLES = new Set(["Manager", "Officer", "Super Admin"]);
 
 const normalizeRole = (value: unknown) => {
   const role = String(value ?? "").trim();
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const id = String(body?.id ?? "").trim();
     const password = String(body?.password ?? "").trim();
-    const selectedRole = normalizeRole(body?.role) ?? "Admin";
+    const selectedRole = normalizeRole(body?.role) ?? "Officer";
 
     if (!id || !password) {
       return NextResponse.json(

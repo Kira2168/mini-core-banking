@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ensurePermission } from "@/lib/permissions";
+import { ensurePermission, getRoleNameById, getSessionFromRequest } from "@/lib/permissions";
+
+const TRANSFER_APPROVAL_LIMIT = Number(process.env.TRANSFER_APPROVAL_LIMIT ?? "100000");
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -48,6 +50,17 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Amount must be greater than zero." },
         { status: 400 }
       );
+    }
+
+    if (Number.isFinite(TRANSFER_APPROVAL_LIMIT) && amount > TRANSFER_APPROVAL_LIMIT) {
+      const session = getSessionFromRequest(request);
+      const roleName = session ? await getRoleNameById(session.roleId) : null;
+      if (roleName !== "Manager" && roleName !== "Super Admin") {
+        return NextResponse.json(
+          { success: false, error: "Manager approval required for this transfer amount." },
+          { status: 403 }
+        );
+      }
     }
 
     const debitAmount = -Math.abs(amount);

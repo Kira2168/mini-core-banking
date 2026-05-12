@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getSessionFromRequest } from "@/lib/permissions";
+import { getDefaultPermissionsForRole, getSessionFromRequest } from "@/lib/permissions";
 
 export async function GET(request: NextRequest) {
   const session = getSessionFromRequest(request);
@@ -26,14 +26,19 @@ export async function GET(request: NextRequest) {
       [session.roleId]
     );
 
+    const roleName = roleRows?.[0]?.roleName ?? "";
+    const defaultPermissions = getDefaultPermissionsForRole(roleName);
+    const dbPermissions = (permRows ?? []).map((row: any) => row.permissionName);
+    const mergedPermissions = Array.from(new Set([...dbPermissions, ...defaultPermissions]));
+
     return NextResponse.json({
       success: true,
       data: {
         userId: session.userId,
         username: session.username,
         roleId: session.roleId,
-        roleName: roleRows?.[0]?.roleName ?? "",
-        permissions: (permRows ?? []).map((row: any) => row.permissionName),
+        roleName,
+        permissions: mergedPermissions,
       },
     });
   } catch (error: any) {
