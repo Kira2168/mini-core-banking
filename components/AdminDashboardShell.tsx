@@ -7,6 +7,7 @@ import { Moon, Sun } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
 import AdminClientsTable from "@/components/AdminClientsTable";
 import AdminAccountsPanel from "@/components/AdminAccountsPanel";
+import AdminBalancesPanel from "@/components/AdminBalancesPanel";
 import AdminProductsPanel from "@/components/AdminProductsPanel";
 import AdminTransactionsPanel from "@/components/AdminTransactionsPanel";
 import AdminDashboardMetrics from "@/components/AdminDashboardMetrics";
@@ -18,6 +19,7 @@ type AdminDashboardShellProps = {
   showProducts?: boolean;
   showAccounts?: boolean;
   showTransactions?: boolean;
+  showBalances?: boolean;
   showBackToDashboard?: boolean;
   showSecurity?: boolean;
 };
@@ -28,12 +30,14 @@ export default function AdminDashboardShell({
   showProducts = true,
   showAccounts = true,
   showTransactions = false,
+  showBalances = false,
   showBackToDashboard = false,
   showSecurity = false,
 }: AdminDashboardShellProps) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [productsRevision, setProductsRevision] = useState(0);
   const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [roleName, setRoleName] = useState("");
   const isDark = theme === "dark";
 
   useEffect(() => {
@@ -43,11 +47,14 @@ export default function AdminDashboardShell({
         const result = await response.json();
         if (response.ok && result?.success) {
           setPermissions(Array.isArray(result.data?.permissions) ? result.data.permissions : []);
+          setRoleName(String(result.data?.roleName ?? ""));
         } else {
           setPermissions([]);
+          setRoleName("");
         }
       } catch {
         setPermissions([]);
+        setRoleName("");
       }
     };
 
@@ -62,11 +69,13 @@ export default function AdminDashboardShell({
   const canViewTransactions = permissionSet.has("view_transactions");
   const canViewSecurity =
     permissionSet.has("view_users") || permissionSet.has("view_roles") || permissionSet.has("edit_roles");
+  const canViewBalances = roleName === "Manager" || roleName === "Super Admin";
 
   const showClientsSection = showClients && canViewClients;
   const showProductsSection = showProducts && canViewProducts;
   const showAccountsSection = showAccounts && canViewAccounts;
   const showTransactionsSection = showTransactions && canViewTransactions;
+  const showBalancesSection = showBalances && canViewBalances;
   const showSecuritySection = showSecurity && canViewSecurity;
 
   return (
@@ -186,6 +195,18 @@ export default function AdminDashboardShell({
                 Transactions
               </Link>
             ) : null}
+            {canViewBalances ? (
+              <Link
+                href="/dashboard/balance"
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                    : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+                }`}
+              >
+                Balances
+              </Link>
+            ) : null}
             {canViewSecurity ? (
               <Link
                 href="/dashboard/security"
@@ -222,6 +243,7 @@ export default function AdminDashboardShell({
         ) : null}
         {showAccountsSection ? <AdminAccountsPanel theme={theme} refreshKey={productsRevision} /> : null}
         {showTransactionsSection ? <AdminTransactionsPanel theme={theme} /> : null}
+        {showBalancesSection ? <AdminBalancesPanel theme={theme} /> : null}
         {showSecuritySection ? <AdminSecurityPanel theme={theme} /> : null}
       </section>
     </main>
