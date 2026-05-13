@@ -4,6 +4,23 @@ import { db } from "@/lib/db";
 import { ensurePermission, getRoleNameById, getSessionFromRequest } from "@/lib/permissions";
 
 const TRANSFER_APPROVAL_LIMIT = Number(process.env.TRANSFER_APPROVAL_LIMIT ?? "100000");
+const BANK_FEE_ACCOUNT_ID = Number(process.env.BANK_FEE_ACCOUNT_ID ?? "1");
+
+const getTransferFee = (amount: number) => {
+  if (amount <= 1000) {
+    return 5;
+  }
+  if (amount <= 5000) {
+    return 10;
+  }
+  if (amount <= 10000) {
+    return 15;
+  }
+  if (amount <= 50000) {
+    return 25;
+  }
+  return 50;
+};
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -63,7 +80,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const debitAmount = -Math.abs(amount);
+    const feeAmount = getTransferFee(amount);
+    const debitAmount = -Math.abs(amount + feeAmount);
     const creditAmount = Math.abs(amount);
 
     await connection.beginTransaction();
@@ -104,27 +122,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "One or both accounts not found." }, { status: 404 });
     }
 
-    const ordered = [resolvedFromId, resolvedToId].sort((a, b) => a - b);
+    const feeAccountId = Number.isInteger(BANK_FEE_ACCOUNT_ID) && BANK_FEE_ACCOUNT_ID > 0 ? BANK_FEE_ACCOUNT_ID : null;
+    if (!feeAccountId) {
+      await connection.rollback();
+      return NextResponse.json({ success: false, error: "Fee account is not configured." }, { status: 500 });
+    }
+
+    if (resolvedFromId === feeAccountId || resolvedToId === feeAccountId) {
+      await connection.rollback();
+      return NextResponse.json({ success: false, error: "Fee account must be different from transfer accounts." }, { status: 400 });
+    }
+
+    const ordered = [resolvedFromId, resolvedToId, feeAccountId].sort((a, b) => a - b);
     const [accountRows]: any = await connection.execute(
-      `SELECT account_id AS accountId, balance FROM accounts WHERE account_id IN (?, ?) FOR UPDATE`,
-      [ordered[0], ordered[1]]
+      `SELECT account_id AS accountId, balance FROM accounts WHERE account_id IN (?, ?, ?) FOR UPDATE`,
+      [ordered[0], ordered[1], ordered[2]]
     );
 
-    if (accountRows.length !== 2) {
+    if (accountRows.length !== 3) {
       await connection.rollback();
       return NextResponse.json({ success: false, error: "One or both accounts not found." }, { status: 404 });
     }
 
     const fromRow = accountRows.find((row: any) => Number(row.accountId) === resolvedFromId);
     const toRow = accountRows.find((row: any) => Number(row.accountId) === resolvedToId);
+    const feeRow = accountRows.find((row: any) => Number(row.accountId) === feeAccountId);
 
-    if (!fromRow || !toRow) {
+    if (!fromRow || !toRow || !feeRow) {
       await connection.rollback();
       return NextResponse.json({ success: false, error: "One or both accounts not found." }, { status: 404 });
     }
 
     const fromBalance = Number(fromRow.balance ?? 0) + debitAmount;
     const toBalance = Number(toRow.balance ?? 0) + creditAmount;
+    const feeBalance = Number(feeRow.balance ?? 0) + feeAmount;
 
     const [transferResult]: any = await connection.execute(
       `
@@ -136,6 +167,7 @@ export async function POST(request: NextRequest) {
 
     await connection.execute(`UPDATE accounts SET balance = ? WHERE account_id = ?`, [fromBalance, resolvedFromId]);
     await connection.execute(`UPDATE accounts SET balance = ? WHERE account_id = ?`, [toBalance, resolvedToId]);
+    await connection.execute(`UPDATE accounts SET balance = ? WHERE account_id = ?`, [feeBalance, feeAccountId]);
 
     await connection.execute(
       `
@@ -153,6 +185,22 @@ export async function POST(request: NextRequest) {
       [resolvedToId, creditAmount, reference]
     );
 
+    await connection.execute(
+      `
+      INSERT INTO transactions (account_id, transaction_type, direction, amount, reference)
+      VALUES (?, 'Fee', 'Debit', ?, ?)
+      `,
+      [resolvedFromId, -Math.abs(feeAmount), reference]
+    );
+
+    await connection.execute(
+      `
+      INSERT INTO transactions (account_id, transaction_type, direction, amount, reference)
+      VALUES (?, 'Fee', 'Credit', ?, ?)
+      `,
+      [feeAccountId, Math.abs(feeAmount), reference]
+    );
+
     await connection.commit();
 
     return NextResponse.json({
@@ -163,6 +211,7 @@ export async function POST(request: NextRequest) {
         toAccountId: resolvedToId,
         fromBalance,
         toBalance,
+        feeAmount,
       },
     });
   } catch (error: any) {

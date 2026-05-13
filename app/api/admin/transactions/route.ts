@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { ensurePermission } from "@/lib/permissions";
+import { ensurePermission, getRoleNameById, getSessionFromRequest } from "@/lib/permissions";
 
 type Direction = "Credit" | "Debit";
 
@@ -9,6 +9,7 @@ type TypeFilter = "All" | "Cash" | "Transfer";
 
 const VALID_TYPES = new Set<TypeFilter>(["All", "Cash", "Transfer"]);
 const VALID_DIRECTIONS = new Set<Direction>(["Credit", "Debit"]);
+const CASH_APPROVAL_LIMIT = Number(process.env.CASH_APPROVAL_LIMIT ?? "100000");
 
 const toPositiveInt = (value: string) => {
   const numberValue = Number(value);
@@ -32,6 +33,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await db.execute(
+      `
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        setting_key VARCHAR(64) PRIMARY KEY,
+        setting_value VARCHAR(255) NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+      `
+    );
+
+    const [resetRows]: any = await db.execute(
+      `SELECT setting_value AS settingValue FROM admin_settings WHERE setting_key = 'transactions_reset_at' LIMIT 1`
+    );
+    const resetAt = resetRows?.[0]?.settingValue ?? null;
+
     const type = toSafeTypeFilter(request.nextUrl.searchParams.get("type"));
     const accountIdRaw = request.nextUrl.searchParams.get("accountId");
     const accountId = accountIdRaw ? toPositiveInt(accountIdRaw) : null;
@@ -73,12 +89,13 @@ export async function GET(request: NextRequest) {
       INNER JOIN products p ON p.product_id = a.product_id
       WHERE (? = 'All' OR t.transaction_type = ?)
         AND (? IS NULL OR t.account_id = ?)
+        AND t.created_at >= IFNULL(?, '1970-01-01')
         AND (? IS NULL OR t.created_at >= ?)
         AND (? IS NULL OR t.created_at <= ?)
       ORDER BY t.created_at DESC
       LIMIT ?
       `,
-      [type, type, accountId, accountId, startDate, startDate, endDate, endDate, limit]
+      [type, type, accountId, accountId, resetAt, startDate, startDate, endDate, endDate, limit]
     );
 
     return NextResponse.json({ success: true, data: rows ?? [] });
@@ -117,6 +134,17 @@ export async function POST(request: NextRequest) {
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ success: false, error: "Amount must be greater than zero." }, { status: 400 });
+    }
+
+    if (Number.isFinite(CASH_APPROVAL_LIMIT) && amount > CASH_APPROVAL_LIMIT) {
+      const session = getSessionFromRequest(request);
+      const roleName = session ? await getRoleNameById(session.roleId) : null;
+      if (roleName !== "Manager" && roleName !== "Super Admin") {
+        return NextResponse.json(
+          { success: false, error: "Manager approval required for this cash amount." },
+          { status: 403 }
+        );
+      }
     }
 
     const signedAmount = direction === "Debit" ? -Math.abs(amount) : Math.abs(amount);

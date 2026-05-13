@@ -88,7 +88,9 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
       const result: ApiResponse<Product[]> = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.error ?? "Failed to load products.");
+        if (response.status !== 403 && result.error !== "Forbidden") {
+          setError(result.error ?? "Failed to load products.");
+        }
         return;
       }
 
@@ -123,7 +125,9 @@ export default function AdminAccountsPanel({ theme, refreshKey }: AdminAccountsP
       const result: ApiResponse<AccountRow[]> = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.error ?? "Failed to load accounts.");
+        if (response.status !== 403 && result.error !== "Forbidden") {
+          setError(result.error ?? "Failed to load accounts.");
+        }
         return;
       }
 

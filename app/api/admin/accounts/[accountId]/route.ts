@@ -59,3 +59,50 @@ export async function PUT(
     );
   }
 }
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ accountId: string }> }
+) {
+  const denial = await ensurePermission(request, "view_accounts");
+  if (denial) {
+    return denial;
+  }
+
+  const { accountId: accountIdParam } = await params;
+  const accountId = toPositiveInt(accountIdParam);
+  const accountNumber = String(accountIdParam ?? "").trim();
+
+  if (!accountId && !accountNumber) {
+    return NextResponse.json({ success: false, error: "Invalid account id." }, { status: 400 });
+  }
+
+  try {
+    const [rows]: any = await db.execute(
+      `
+      SELECT
+        a.account_id AS accountId,
+        a.account_number AS accountNumber,
+        a.client_id AS clientId,
+        COALESCE(CONCAT(ic.first_name, ' ', ic.last_name), nic.organization_name, 'Client') AS clientName
+      FROM accounts a
+      LEFT JOIN Individual_Clients ic ON ic.individual_id = a.client_id
+      LEFT JOIN Non_Individual_Clients nic ON nic.non_individual_id = a.client_id
+      WHERE a.account_id = ? OR a.account_number = ?
+      LIMIT 1
+      `,
+      [accountId ?? -1, accountNumber]
+    );
+
+    if (!rows.length) {
+      return NextResponse.json({ success: false, error: "Account not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: rows[0] });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error?.message ?? "Failed to load account." },
+      { status: 500 }
+    );
+  }
+}

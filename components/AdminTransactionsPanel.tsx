@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { GState, jsPDF } from "jspdf";
 
 type TransactionRow = {
   transactionId: number;
@@ -21,6 +22,36 @@ type ApiResponse<T> = {
   error?: string;
   data: T;
 };
+
+type ReceiptPayload =
+  | {
+      type: "Cash";
+      direction: "Credit" | "Debit";
+      amount: number;
+      accountId: number;
+      accountNumber: string;
+      clientName: string;
+      reference: string | null;
+      transactionId: number;
+      newBalance: number;
+      createdAt: string;
+    }
+  | {
+      type: "Transfer";
+      amount: number;
+      fromAccountId: number;
+      fromAccountNumber: string;
+      fromClientName: string;
+      toAccountId: number;
+      toAccountNumber: string;
+      toClientName: string;
+      reference: string | null;
+      transferId: number;
+      feeAmount: number;
+      fromBalance: number;
+      toBalance: number;
+      createdAt: string;
+    };
 
 type AdminTransactionsPanelProps = {
   theme: "dark" | "light";
@@ -51,6 +82,10 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
   const [error, setError] = useState("");
   const [postError, setPostError] = useState("");
   const [postSuccess, setPostSuccess] = useState("");
+  const [receipt, setReceipt] = useState<ReceiptPayload | null>(null);
+  const [clearSuccess, setClearSuccess] = useState("");
+  const [clearing, setClearing] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("All");
   const [accountFilter, setAccountFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -121,9 +156,45 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
     }
   };
 
+  const loadSession = async () => {
+    try {
+      const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
+      const result: ApiResponse<{ roleName: string }> = await response.json();
+      if (response.ok && result.success) {
+        setIsSuperAdmin(result.data?.roleName === "Super Admin");
+      }
+    } catch {
+      setIsSuperAdmin(false);
+    }
+  };
+
   useEffect(() => {
     loadTransactions();
+    loadSession();
   }, [typeFilter]);
+
+  const clearTransactions = async () => {
+    setClearing(true);
+    setClearSuccess("");
+    setError("");
+
+    try {
+      const response = await fetch("/api/admin/transactions/reset", { method: "POST" });
+      const result: ApiResponse<{ resetAt: string }> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to clear transactions.");
+        return;
+      }
+
+      setClearSuccess("Transaction history cleared.");
+      await loadTransactions();
+    } catch {
+      setError("Failed to clear transactions.");
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const onFilterSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -134,6 +205,7 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
     event.preventDefault();
     setPostError("");
     setPostSuccess("");
+    setReceipt(null);
 
     const accountId = Number(cashForm.accountId);
     const amount = Number(cashForm.amount);
@@ -168,6 +240,19 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
       }
 
       setPostSuccess(`Cash ${cashForm.direction.toLowerCase()} posted. New balance: ${result.data.newBalance.toFixed(2)}`);
+      const summary = await fetchAccountSummary(accountId);
+      setReceipt({
+        type: "Cash",
+        direction: cashForm.direction,
+        amount,
+        accountId,
+        accountNumber: summary.accountNumber,
+        clientName: summary.clientName,
+        reference: cashForm.reference.trim() || null,
+        transactionId: result.data.transactionId,
+        newBalance: result.data.newBalance,
+        createdAt: new Date().toISOString(),
+      });
       setCashForm({ accountId: "", direction: "Credit", amount: "", reference: "" });
       await loadTransactions();
     } catch {
@@ -179,6 +264,7 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
     event.preventDefault();
     setPostError("");
     setPostSuccess("");
+    setReceipt(null);
 
     const fromAccountId = Number(transferForm.fromAccountId);
     const toAccountId = Number(transferForm.toAccountId);
@@ -216,7 +302,8 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
         }),
       });
 
-      const result: ApiResponse<{ transferId: number }> = await response.json();
+      const result: ApiResponse<{ transferId: number; feeAmount: number; fromBalance: number; toBalance: number }> =
+        await response.json();
 
       if (!response.ok || !result.success) {
         setPostError(result.error ?? "Failed to post transfer transaction.");
@@ -224,6 +311,26 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
       }
 
       setPostSuccess("Transfer posted successfully.");
+      const [fromSummary, toSummary] = await Promise.all([
+        fetchAccountSummary(fromAccountId),
+        fetchAccountSummary(toAccountId),
+      ]);
+      setReceipt({
+        type: "Transfer",
+        amount,
+        fromAccountId,
+        fromAccountNumber: fromSummary.accountNumber,
+        fromClientName: fromSummary.clientName,
+        toAccountId,
+        toAccountNumber: toSummary.accountNumber,
+        toClientName: toSummary.clientName,
+        reference: transferForm.reference.trim() || null,
+        transferId: result.data.transferId,
+        feeAmount: result.data.feeAmount,
+        fromBalance: result.data.fromBalance,
+        toBalance: result.data.toBalance,
+        createdAt: new Date().toISOString(),
+      });
       setTransferForm({ fromAccountId: "", toAccountId: "", amount: "", reference: "" });
       await loadTransactions();
     } catch {
@@ -235,11 +342,152 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
     return `${transactions.length} result${transactions.length === 1 ? "" : "s"}`;
   }, [transactions.length]);
 
+  const loadImageDataUrl = async (src: string) => {
+    const response = await fetch(src);
+    if (!response.ok) {
+      return null;
+    }
+    const blob = await response.blob();
+    return new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const downloadReceipt = async () => {
+    if (!receipt) {
+      return;
+    }
+
+    const doc = new jsPDF();
+    const lines: string[] = [];
+
+    const [logoDataUrl, backgroundDataUrl] = await Promise.all([
+      loadImageDataUrl("/logo.png"),
+      loadImageDataUrl("/bank.jpg"),
+    ]);
+
+    if (backgroundDataUrl) {
+      doc.addImage(backgroundDataUrl, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+      doc.setGState(new GState({ opacity: 0.3 }));
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, 210, 297, "F");
+      doc.setGState(new GState({ opacity: 1 }));
+    }
+
+    doc.setFillColor(6, 34, 41);
+    doc.rect(0, 0, 210, 30, "F");
+    doc.setTextColor(240, 255, 253);
+    doc.setFontSize(14);
+    const headerTextX = logoDataUrl ? 34 : 14;
+    doc.text("LITTLE Mini Banking System", headerTextX, 18);
+
+    if (logoDataUrl) {
+      doc.addImage(logoDataUrl, "PNG", 14, 7, 16, 16, undefined, "FAST");
+    }
+
+    doc.setFillColor(248, 255, 253);
+    doc.roundedRect(12, 40, 186, 210, 6, 6, "F");
+    doc.setDrawColor(209, 231, 227);
+    doc.roundedRect(12, 40, 186, 210, 6, 6, "S");
+
+    doc.setTextColor(20, 55, 59);
+    doc.setFontSize(16);
+    doc.text("Transaction Receipt", 18, 56);
+
+    doc.setDrawColor(198, 222, 219);
+    doc.line(18, 60, 190, 60);
+
+    lines.push(`Type: ${receipt.type}`);
+    lines.push(`Date: ${new Date(receipt.createdAt).toLocaleString()}`);
+
+    if (receipt.type === "Cash") {
+      lines.push(`Transaction ID: ${receipt.transactionId}`);
+      lines.push(`Direction: ${receipt.direction}`);
+      lines.push(`Account No: ${receipt.accountNumber}`);
+      lines.push(`Client: ${receipt.clientName}`);
+      lines.push(`Amount: ${receipt.amount.toFixed(2)}`);
+      lines.push("Fee: 0.00");
+      lines.push(`New Balance: ${receipt.newBalance.toFixed(2)}`);
+      if (receipt.reference) {
+        lines.push(`Reference: ${receipt.reference}`);
+      }
+    } else {
+      lines.push(`Transfer ID: ${receipt.transferId}`);
+      lines.push(`From Account No: ${receipt.fromAccountNumber}`);
+      lines.push(`From Client: ${receipt.fromClientName}`);
+      lines.push(`To Account No: ${receipt.toAccountNumber}`);
+      lines.push(`To Client: ${receipt.toClientName}`);
+      lines.push(`Amount: ${receipt.amount.toFixed(2)}`);
+      lines.push(`Fee: ${receipt.feeAmount.toFixed(2)}`);
+      lines.push(`From Balance: ${receipt.fromBalance.toFixed(2)}`);
+      lines.push(`To Balance: ${receipt.toBalance.toFixed(2)}`);
+      if (receipt.reference) {
+        lines.push(`Reference: ${receipt.reference}`);
+      }
+    }
+
+    const left = 18;
+    let top = 72;
+    doc.setFontSize(11.5);
+    doc.setTextColor(26, 64, 68);
+    lines.forEach((line) => {
+      doc.text(line, left, top);
+      top += 8;
+    });
+
+    doc.setTextColor(200, 40, 40);
+    doc.setFontSize(26);
+    doc.text("PAID", 150, 92, { angle: 20 });
+
+    doc.setDrawColor(30, 108, 116);
+    doc.setLineWidth(0.6);
+    doc.circle(158, 210, 18, "S");
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 108, 116);
+    doc.text("LITTLE MINI", 150, 207, { angle: 0 });
+    doc.text("BANKING SYSTEM", 147, 212, { angle: 0 });
+
+    doc.setFontSize(10);
+    doc.setTextColor(120, 142, 139);
+    doc.text("Generated by LITTLE Mini Banking System", 14, 285);
+
+    doc.save(`receipt-${receipt.type.toLowerCase()}-${Date.now()}.pdf`);
+  };
+
+  const fetchAccountSummary = async (accountId: number) => {
+    const response = await fetch(`/api/admin/accounts/${accountId}`, { method: "GET", cache: "no-store" });
+    const result: ApiResponse<{ accountNumber: string; clientName: string }> = await response.json();
+    if (!response.ok || !result.success) {
+      return { accountNumber: String(accountId), clientName: "Client" };
+    }
+    return {
+      accountNumber: result.data.accountNumber ?? String(accountId),
+      clientName: result.data.clientName ?? "Client",
+    };
+  };
+
   return (
     <section className={`mt-8 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className={`text-lg font-semibold ${heading}`}>Transactions</h2>
         <span className={`rounded-full border px-3 py-1 text-xs ${badge}`}>{filteredLabel}</span>
+        {isSuperAdmin ? (
+          <button
+            type="button"
+            onClick={clearTransactions}
+            disabled={clearing}
+            className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+              isDark
+                ? "border-[#35535b] bg-[#10252d] text-[#b9d9d4] hover:bg-[#183641]"
+                : "border-[#98c4be] bg-[#f8fffe] text-[#2c5f5a] hover:bg-[#eff9f7]"
+            } ${clearing ? "opacity-70" : ""}`}
+          >
+            {clearing ? "Clearing..." : "Clear History"}
+          </button>
+        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -349,9 +597,26 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
       ) : null}
 
       {postSuccess ? (
-        <p className="mb-4 mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
-          {postSuccess}
-        </p>
+        <div className="mb-4 mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>{postSuccess}</span>
+            {receipt ? (
+                  <button
+                    type="button"
+                    onClick={downloadReceipt}
+                className="rounded-lg border border-emerald-200/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/20"
+              >
+                Download PDF
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {clearSuccess ? (
+        <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+          {clearSuccess}
+        </div>
       ) : null}
 
       {error ? (

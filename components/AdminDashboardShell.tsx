@@ -62,7 +62,7 @@ export default function AdminDashboardShell({
   }, []);
 
   const permissionSet = useMemo(() => new Set(permissions ?? []), [permissions]);
-  const canViewDashboard = permissionSet.has("view_dashboard");
+  const canViewDashboard = permissionSet.has("view_dashboard") && roleName !== "Officer";
   const canViewClients = permissionSet.has("view_clients");
   const canViewProducts = permissionSet.has("view_products");
   const canViewAccounts = permissionSet.has("view_accounts");
