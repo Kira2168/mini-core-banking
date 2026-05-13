@@ -17,6 +17,18 @@ type TransactionRow = {
   productName: string;
 };
 
+type CashApprovalRow = {
+  approvalId: number;
+  accountId: number;
+  accountNumber: string;
+  clientId: number;
+  direction: "Credit" | "Debit";
+  amount: string | number;
+  reference: string | null;
+  status: "Pending" | "Approved" | "Rejected";
+  createdAt: string;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   error?: string;
@@ -86,6 +98,10 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
   const [clearSuccess, setClearSuccess] = useState("");
   const [clearing, setClearing] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isManager, setIsManager] = useState(false);
+  const [approvals, setApprovals] = useState<CashApprovalRow[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [approvalSuccess, setApprovalSuccess] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("All");
   const [accountFilter, setAccountFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -161,16 +177,35 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
       const response = await fetch("/api/admin/security/me", { method: "GET", cache: "no-store" });
       const result: ApiResponse<{ roleName: string }> = await response.json();
       if (response.ok && result.success) {
-        setIsSuperAdmin(result.data?.roleName === "Super Admin");
+        const roleName = result.data?.roleName ?? "";
+        setIsSuperAdmin(roleName === "Super Admin");
+        setIsManager(roleName === "Manager");
       }
     } catch {
       setIsSuperAdmin(false);
+      setIsManager(false);
+    }
+  };
+
+  const loadApprovals = async () => {
+    setApprovalsLoading(true);
+    try {
+      const response = await fetch("/api/admin/transactions/approvals", { method: "GET", cache: "no-store" });
+      const result: ApiResponse<CashApprovalRow[]> = await response.json();
+      if (response.ok && result.success) {
+        setApprovals(result.data ?? []);
+      }
+    } catch {
+      setApprovals([]);
+    } finally {
+      setApprovalsLoading(false);
     }
   };
 
   useEffect(() => {
     loadTransactions();
     loadSession();
+    loadApprovals();
   }, [typeFilter]);
 
   const clearTransactions = async () => {
@@ -232,12 +267,68 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
         }),
       });
 
-      const result: ApiResponse<{ transactionId: number; newBalance: number }> = await response.json();
+      const result: ApiResponse<{
+        transactionId?: number;
+        newBalance?: number;
+        status?: "Pending";
+        approvalId?: number;
+      }> = await response.json();
 
       if (!response.ok || !result.success) {
         setPostError(result.error ?? "Failed to post cash transaction.");
         return;
       }
+
+      if (result.data?.status === "Pending") {
+        setPostSuccess("Cash request submitted for manager approval.");
+        setCashForm({ accountId: "", direction: "Credit", amount: "", reference: "" });
+        await loadApprovals();
+        return;
+      }
+
+  const updateApproval = async (approvalId: number, action: "approve" | "reject") => {
+    try {
+      const response = await fetch(`/api/admin/transactions/approvals/${approvalId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const result: ApiResponse<{
+        transactionId?: number;
+        accountId?: number;
+        newBalance?: number;
+      }> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to update approval.");
+        return;
+      }
+
+      if (action === "approve" && result.data?.transactionId && result.data?.accountId) {
+        const summary = await fetchAccountSummary(result.data.accountId);
+        setReceipt({
+          type: "Cash",
+          direction: "Credit",
+          amount: 0,
+          accountId: result.data.accountId,
+          accountNumber: summary.accountNumber,
+          clientName: summary.clientName,
+          reference: "Approved cash posting",
+          transactionId: result.data.transactionId,
+          newBalance: Number(result.data.newBalance ?? 0),
+          createdAt: new Date().toISOString(),
+        });
+        setApprovalSuccess("Cash approval posted successfully.");
+      } else if (action === "reject") {
+        setApprovalSuccess("Cash approval rejected.");
+      }
+
+      await loadApprovals();
+      await loadTransactions();
+    } catch {
+      setError("Failed to update approval.");
+    }
+  };
 
       setPostSuccess(`Cash ${cashForm.direction.toLowerCase()} posted. New balance: ${result.data.newBalance.toFixed(2)}`);
       const summary = await fetchAccountSummary(accountId);
@@ -469,6 +560,27 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
     };
   };
 
+  const updateApproval = async (approvalId: number, action: "approve" | "reject") => {
+    try {
+      const response = await fetch(`/api/admin/transactions/approvals/${approvalId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const result: ApiResponse<unknown> = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to update approval.");
+        return;
+      }
+
+      await loadApprovals();
+      await loadTransactions();
+    } catch {
+      setError("Failed to update approval.");
+    }
+  };
+
   return (
     <section className={`mt-8 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -590,6 +702,76 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
         </form>
       </div>
 
+      {isManager || isSuperAdmin ? (
+        <div className={`mt-6 rounded-2xl border p-5 backdrop-blur-md ${panel}`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className={`text-lg font-semibold ${heading}`}>Pending Cash Approvals</h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-160 border-collapse text-left text-sm">
+              <thead>
+                <tr className={`border-b ${tableHead}`}>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Account</th>
+                  <th className="px-3 py-2 font-medium">Client</th>
+                  <th className="px-3 py-2 font-medium">Direction</th>
+                  <th className="px-3 py-2 font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Reference</th>
+                  <th className="px-3 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className={tableBody}>
+                {approvalsLoading ? (
+                  <tr>
+                    <td className={`px-3 py-6 ${emptyText}`} colSpan={7}>
+                      Loading approvals...
+                    </td>
+                  </tr>
+                ) : approvals.length === 0 ? (
+                  <tr>
+                    <td className={`px-3 py-6 ${emptyText}`} colSpan={7}>
+                      No pending approvals.
+                    </td>
+                  </tr>
+                ) : (
+                  approvals.map((approval) => (
+                    <tr key={approval.approvalId} className={`border-b ${tableRow}`}>
+                      <td className="px-3 py-3">{new Date(approval.createdAt).toLocaleString()}</td>
+                      <td className="px-3 py-3">
+                        {approval.accountNumber} (#{approval.accountId})
+                      </td>
+                      <td className="px-3 py-3">{approval.clientId}</td>
+                      <td className="px-3 py-3">{approval.direction}</td>
+                      <td className="px-3 py-3">{Number(approval.amount).toFixed(2)}</td>
+                      <td className="px-3 py-3">{approval.reference ?? "-"}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateApproval(approval.approvalId, "approve")}
+                            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/20"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateApproval(approval.approvalId, "reject")}
+                            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-200 transition-colors hover:bg-red-500/20"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
       {postError ? (
         <p className="mb-4 mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {postError}
@@ -616,6 +798,23 @@ export default function AdminTransactionsPanel({ theme }: AdminTransactionsPanel
       {clearSuccess ? (
         <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
           {clearSuccess}
+        </div>
+      ) : null}
+
+      {approvalSuccess ? (
+        <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>{approvalSuccess}</span>
+            {receipt ? (
+              <button
+                type="button"
+                onClick={downloadReceipt}
+                className="rounded-lg border border-emerald-200/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/20"
+              >
+                Download PDF
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

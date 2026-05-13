@@ -140,10 +140,56 @@ export async function POST(request: NextRequest) {
       const session = getSessionFromRequest(request);
       const roleName = session ? await getRoleNameById(session.roleId) : null;
       if (roleName !== "Manager" && roleName !== "Super Admin") {
-        return NextResponse.json(
-          { success: false, error: "Manager approval required for this cash amount." },
-          { status: 403 }
+        await db.execute(
+          `
+          CREATE TABLE IF NOT EXISTS cash_approvals (
+            approval_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+            account_id BIGINT NOT NULL,
+            direction VARCHAR(10) NOT NULL,
+            amount DECIMAL(12, 2) NOT NULL,
+            reference VARCHAR(255) NULL,
+            requested_by BIGINT NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+            transaction_id BIGINT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            decided_by BIGINT NULL,
+            decided_at TIMESTAMP NULL
+          )
+          `
         );
+
+        const [accountRows]: any = await db.execute(
+          `
+          SELECT account_id AS accountId
+          FROM accounts
+          WHERE account_id = ? OR account_number = ?
+          LIMIT 1
+          `,
+          [accountId ?? -1, accountValue]
+        );
+
+        if (!accountRows.length) {
+          return NextResponse.json({ success: false, error: "Account not found." }, { status: 404 });
+        }
+
+        const resolvedAccountId = Number(accountRows[0].accountId);
+        const requestedBy = session?.userId ?? 0;
+
+        const [approvalResult]: any = await db.execute(
+          `
+          INSERT INTO cash_approvals (account_id, direction, amount, reference, requested_by)
+          VALUES (?, ?, ?, ?, ?)
+          `,
+          [resolvedAccountId, direction, amount, reference, requestedBy]
+        );
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            status: "Pending",
+            approvalId: approvalResult.insertId,
+          },
+        });
       }
     }
 
